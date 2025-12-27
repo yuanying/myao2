@@ -235,8 +235,8 @@ class ReplyToMentionUseCase:
 
 ## 完了基準
 
-- [ ] Message, User, Channel エンティティが実装されている
-- [ ] MessagingService, ResponseGenerator Protocol が定義されている
-- [ ] ReplyToMentionUseCase が実装されている
-- [ ] エンティティの各メソッドがテストされている
-- [ ] ユースケースがモックを使ってテストされている
+- [x] Message, User, Channel エンティティが実装されている
+- [x] MessagingService, ResponseGenerator Protocol が定義されている
+- [x] ReplyToMentionUseCase が実装されている
+- [x] エンティティの各メソッドがテストされている
+- [x] ユースケースがモックを使ってテストされている
