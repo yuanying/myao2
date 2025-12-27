@@ -61,7 +61,7 @@ def main() -> None:
         bot_user_id=bot_user_id,
     )
 
-    register_handlers(app, reply_use_case, event_adapter)
+    register_handlers(app, reply_use_case, event_adapter, bot_user_id)
 
     logger.info("Starting %s...", config.persona.name)
     runner = SlackAppRunner(app, config.slack.app_token)
