@@ -1,5 +1,6 @@
 """LLM integration."""
 
+from myao2.infrastructure.llm.client import LLMClient
 from myao2.infrastructure.llm.exceptions import (
     LLMAuthenticationError,
     LLMError,
@@ -8,6 +9,7 @@ from myao2.infrastructure.llm.exceptions import (
 
 __all__ = [
     "LLMAuthenticationError",
+    "LLMClient",
     "LLMError",
     "LLMRateLimitError",
 ]
