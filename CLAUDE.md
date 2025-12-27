@@ -12,6 +12,7 @@ myao2 - Slack上で友達のように振る舞うチャットボット
 - **Linter**: ruff
 - **型チェック**: ty
 - **永続化**: SQLite
+- **ORM**: SQLModel
 
 ## 開発コマンド
 
