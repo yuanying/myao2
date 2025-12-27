@@ -229,9 +229,9 @@ def test_complete_success(mock_completion, llm_client):
 
 ## 完了基準
 
-- [ ] LLMClient が LiteLLM を正しく呼び出せる
-- [ ] 設定ファイルのパラメータが適用される
-- [ ] LiteLLMResponseGenerator が応答を生成できる
-- [ ] システムプロンプト（ペルソナ）が適用される
-- [ ] エラーが適切な例外クラスで伝播する
-- [ ] 全テストケースが通過する（モック使用）
+- [x] LLMClient が LiteLLM を正しく呼び出せる
+- [x] 設定ファイルのパラメータが適用される
+- [x] LiteLLMResponseGenerator が応答を生成できる
+- [x] システムプロンプト（ペルソナ）が適用される
+- [x] エラーが適切な例外クラスで伝播する
+- [x] 全テストケースが通過する（モック使用）
