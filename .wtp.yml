@@ -1,0 +1,15 @@
+defaults:
+  base_dir: "worktrees"
+hooks:
+  post_create:
+  # Copy real files from the MAIN worktree into the NEW worktree
+  - type: copy
+    from: ".env" # Allowed even if gitignored. 'from' is always relative to the MAIN worktree
+    to: ".env" # Destination is relative to the NEW worktree
+  - type: copy
+    from: "config.yaml"
+    to: "config.yaml"
+
+  # Prefer explicit, single-step setup commands
+  - type: command
+    command: "uv sync"
