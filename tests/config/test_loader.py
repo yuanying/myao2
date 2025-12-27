@@ -12,6 +12,7 @@ from myao2.config import (
     ConfigValidationError,
     EnvironmentVariableError,
     LLMConfig,
+    MemoryConfig,
     PersonaConfig,
     SlackConfig,
     expand_env_vars,
@@ -99,6 +100,9 @@ llm:
 persona:
   name: "myao"
   system_prompt: "テスト用システムプロンプト"
+
+memory:
+  database_path: "./data/memory.db"
 """
         config_path = temp_config_dir / "config.yaml"
         config_path.write_text(config_content)
@@ -111,6 +115,7 @@ persona:
         assert "default" in config.llm
         assert config.llm["default"].model == "gpt-4o"
         assert config.persona.name == "myao"
+        assert config.memory.database_path == "./data/memory.db"
 
     def test_env_var_expansion(
         self, temp_config_dir: Path, env_vars: dict[str, str]
@@ -128,6 +133,9 @@ llm:
 persona:
   name: "test"
   system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
 """
         config_path = temp_config_dir / "config.yaml"
         config_path.write_text(config_content)
@@ -159,6 +167,9 @@ llm:
 persona:
   name: "myao"
   system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
 """
         config_path = temp_config_dir / "config.yaml"
         config_path.write_text(config_content)
@@ -188,6 +199,9 @@ llm:
 persona:
   name: "myao"
   system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
 """
         config_path = temp_config_dir / "config.yaml"
         config_path.write_text(config_content)
@@ -317,6 +331,9 @@ llm:
 persona:
   name: "myao"
   system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
 """
         config_path = temp_config_dir / "config.yaml"
         config_path.write_text(config_content)
@@ -359,9 +376,11 @@ class TestDataClasses:
         slack = SlackConfig(bot_token="t1", app_token="t2")
         llm = {"default": LLMConfig(model="gpt-4o")}
         persona = PersonaConfig(name="myao", system_prompt="test")
+        memory = MemoryConfig(database_path="./data/memory.db")
 
-        config = Config(slack=slack, llm=llm, persona=persona)
+        config = Config(slack=slack, llm=llm, persona=persona, memory=memory)
 
         assert config.slack == slack
         assert config.llm == llm
         assert config.persona == persona
+        assert config.memory == memory

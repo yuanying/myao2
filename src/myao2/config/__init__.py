@@ -7,7 +7,13 @@ from myao2.config.loader import (
     expand_env_vars,
     load_config,
 )
-from myao2.config.models import Config, LLMConfig, PersonaConfig, SlackConfig
+from myao2.config.models import (
+    Config,
+    LLMConfig,
+    MemoryConfig,
+    PersonaConfig,
+    SlackConfig,
+)
 
 __all__ = [
     "Config",
@@ -15,6 +21,7 @@ __all__ = [
     "ConfigValidationError",
     "EnvironmentVariableError",
     "LLMConfig",
+    "MemoryConfig",
     "PersonaConfig",
     "SlackConfig",
     "expand_env_vars",
