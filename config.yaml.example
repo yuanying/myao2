@@ -1,0 +1,38 @@
+# myao2 設定ファイル
+
+# Slack設定
+slack:
+  bot_token: ${SLACK_BOT_TOKEN}  # 環境変数参照
+  app_token: ${SLACK_APP_TOKEN}
+
+# LLM設定（LiteLLMのcompletionに渡すdict）
+llm:
+  default:
+    model: "gpt-4o"
+    temperature: 0.7
+    max_tokens: 1000
+  # 用途別に複数設定可能
+  judgment:  # 応答判定用
+    model: "gpt-4o-mini"
+    temperature: 0.3
+
+# ペルソナ設定
+persona:
+  name: "myao"
+  system_prompt: "あなたは友達のように振る舞うチャットボットです。"
+
+# 応答判定設定
+response:
+  check_interval_seconds: 60  # 判定ループの間隔
+  min_wait_seconds: 300  # 最低待機時間（誰も反応しない場合）
+
+# 記憶設定
+memory:
+  database_path: "./data/memory.db"
+  long_term_update_interval_seconds: 3600
+
+# 外部サービス設定
+external:
+  web_search:
+    enabled: false
+    # provider設定など

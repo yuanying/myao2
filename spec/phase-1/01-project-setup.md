@@ -15,6 +15,8 @@
 | `src/myao2/__main__.py` | エントリポイント |
 | 各層の `__init__.py` | サブパッケージ初期化 |
 | `.github/workflows/ci.yml` | CI ワークフロー（lint + test） |
+| `.gitignore` | Git除外設定 |
+| `.env.example` | 環境変数サンプル |
 
 ---
 
@@ -194,9 +196,9 @@ if __name__ == "__main__":
 
 ## 完了基準
 
-- [ ] `pyproject.toml` が作成され、`uv sync` が成功する
-- [ ] すべての `__init__.py` が作成されている
-- [ ] `uv run ruff check .` がエラー0件で通過
-- [ ] `uv run ty check` がエラー0件で通過
-- [ ] `uv run python -c "import myao2"` が成功する
+- [x] `pyproject.toml` が作成され、`uv sync` が成功する
+- [x] すべての `__init__.py` が作成されている
+- [x] `uv run ruff check .` がエラー0件で通過
+- [x] `uv run ty check` がエラー0件で通過
+- [x] `uv run python -c "import myao2"` が成功する
 - [ ] GitHub Actions の CI が正常に動作する（lint + test）
