@@ -95,6 +95,7 @@ Slack上で誰かがコメントした時に、誰も反応しないと寂しい
 | Linter | ruff |
 | 型チェック | ty |
 | 永続化 | SQLite |
+| ORM | SQLModel |
 
 ### 4.2 アーキテクチャ
 
