@@ -267,9 +267,9 @@ class DatabaseError(PersistenceError):
 
 ## 完了基準
 
-- [ ] MessageRepository Protocol が定義されている
-- [ ] MessageModel が SQLModel で定義されている
-- [ ] DatabaseManager が実装されている
-- [ ] MemoryConfig が Config に追加されている
-- [ ] データベースファイルの親ディレクトリが自動作成される
-- [ ] 全テストケースが通過する
+- [x] MessageRepository Protocol が定義されている
+- [x] MessageModel が SQLModel で定義されている
+- [x] DatabaseManager が実装されている
+- [x] MemoryConfig が Config に追加されている
+- [x] データベースファイルの親ディレクトリが自動作成される
+- [x] 全テストケースが通過する
