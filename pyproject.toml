@@ -1,0 +1,40 @@
+[project]
+name = "myao2"
+version = "0.1.0"
+description = "Slack上で友達のように振る舞うチャットボット"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "slack-bolt>=1.18.0",
+    "litellm>=1.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+myao2 = "myao2.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/myao2"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.8.0",
+    "ty>=0.0.1a6",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
