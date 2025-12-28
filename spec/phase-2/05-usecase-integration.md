@@ -408,14 +408,14 @@ User                Slack           UseCase         Repository      HistoryServi
 
 ## 完了基準
 
-- [ ] ReplyToMentionUseCase が MessageRepository を使用している
-- [ ] ReplyToMentionUseCase が ConversationHistoryService を使用している
-- [ ] Context が正しく構築される
-- [ ] 受信メッセージがリポジトリに保存される
-- [ ] 応答メッセージがリポジトリに保存される
-- [ ] スレッド内ではスレッド履歴が使用される
-- [ ] チャンネル直下ではチャンネル履歴が使用される
-- [ ] Context 付きで応答が生成される
-- [ ] エントリポイントで依存性が正しく注入されている
-- [ ] 既存のテストが引き続き通過する
-- [ ] 新規テストケースが通過する
+- [x] ReplyToMentionUseCase が MessageRepository を使用している
+- [x] ReplyToMentionUseCase が ConversationHistoryService を使用している
+- [x] Context が正しく構築される
+- [x] 受信メッセージがリポジトリに保存される
+- [x] 応答メッセージがリポジトリに保存される
+- [x] スレッド内ではスレッド履歴が使用される
+- [x] チャンネル直下ではチャンネル履歴が使用される
+- [x] Context 付きで応答が生成される
+- [x] エントリポイントで依存性が正しく注入されている
+- [x] 既存のテストが引き続き通過する
+- [x] 新規テストケースが通過する
