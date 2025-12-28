@@ -381,10 +381,10 @@ def create_slack_message(
 
 ## 完了基準
 
-- [ ] ConversationHistoryService Protocol が定義されている
-- [ ] SlackConversationHistoryService が実装されている
-- [ ] conversations.replies でスレッド履歴が取得できる
-- [ ] conversations.history でチャンネル履歴が取得できる
-- [ ] サブタイプ（bot_message 等）が除外される
-- [ ] 履歴は古い順で返される
-- [ ] 全テストケースが通過する
+- [x] ConversationHistoryService Protocol が定義されている
+- [x] SlackConversationHistoryService が実装されている
+- [x] conversations.replies でスレッド履歴が取得できる
+- [x] conversations.history でチャンネル履歴が取得できる
+- [x] サブタイプ（bot_message 等）が除外される
+- [x] 履歴は古い順で返される
+- [x] 全テストケースが通過する
