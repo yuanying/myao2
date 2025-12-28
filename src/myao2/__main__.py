@@ -7,8 +7,10 @@ from pathlib import Path
 from myao2.application.use_cases import ReplyToMentionUseCase
 from myao2.config import ConfigError, load_config
 from myao2.infrastructure.llm import LiteLLMResponseGenerator, LLMClient
+from myao2.infrastructure.persistence import DatabaseManager, SQLiteMessageRepository
 from myao2.infrastructure.slack import (
     SlackAppRunner,
+    SlackConversationHistoryService,
     SlackEventAdapter,
     SlackMessagingService,
     create_slack_app,
@@ -42,8 +44,15 @@ def main() -> None:
     bot_user_id = auth_result["user_id"]
     logger.info("Bot user ID: %s", bot_user_id)
 
+    # Initialize database
+    db_manager = DatabaseManager(config.memory.database_path)
+    db_manager.create_tables()
+
+    # Build dependencies
     messaging_service = SlackMessagingService(app.client)
     event_adapter = SlackEventAdapter(app.client)
+    conversation_history_service = SlackConversationHistoryService(app.client)
+    message_repository = SQLiteMessageRepository(db_manager.get_session)
 
     # Use default LLM config
     if "default" not in config.llm:
@@ -54,9 +63,12 @@ def main() -> None:
     llm_client = LLMClient(llm_config)
     response_generator = LiteLLMResponseGenerator(llm_client)
 
+    # Initialize use case
     reply_use_case = ReplyToMentionUseCase(
         messaging_service=messaging_service,
         response_generator=response_generator,
+        message_repository=message_repository,
+        conversation_history_service=conversation_history_service,
         persona=config.persona,
         bot_user_id=bot_user_id,
     )
