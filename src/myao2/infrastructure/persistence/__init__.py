@@ -1,5 +1,8 @@
 """Persistence infrastructure."""
 
+from myao2.infrastructure.persistence.channel_repository import (
+    SQLiteChannelRepository,
+)
 from myao2.infrastructure.persistence.database import DatabaseManager
 from myao2.infrastructure.persistence.exceptions import (
     DatabaseError,
@@ -8,14 +11,20 @@ from myao2.infrastructure.persistence.exceptions import (
 from myao2.infrastructure.persistence.message_repository import (
     SQLiteMessageRepository,
 )
-from myao2.infrastructure.persistence.models import MessageModel, UserModel
+from myao2.infrastructure.persistence.models import (
+    ChannelModel,
+    MessageModel,
+    UserModel,
+)
 from myao2.infrastructure.persistence.user_repository import SQLiteUserRepository
 
 __all__ = [
+    "ChannelModel",
     "DatabaseError",
     "DatabaseManager",
     "MessageModel",
     "PersistenceError",
+    "SQLiteChannelRepository",
     "SQLiteMessageRepository",
     "SQLiteUserRepository",
     "UserModel",

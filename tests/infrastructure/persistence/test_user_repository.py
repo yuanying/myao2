@@ -2,7 +2,6 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
@@ -81,9 +80,7 @@ class TestSave:
         assert found is not None
         assert found.name == "Updated Name"
 
-    async def test_save_multiple_users(
-        self, repository: SQLiteUserRepository
-    ) -> None:
+    async def test_save_multiple_users(self, repository: SQLiteUserRepository) -> None:
         """Test saving multiple different users."""
         user1 = create_test_user(id="U001", name="User One")
         user2 = create_test_user(id="U002", name="User Two")
@@ -111,9 +108,7 @@ class TestSave:
 class TestFindById:
     """find_by_id method tests."""
 
-    async def test_find_existing_user(
-        self, repository: SQLiteUserRepository
-    ) -> None:
+    async def test_find_existing_user(self, repository: SQLiteUserRepository) -> None:
         """Test finding existing user by ID."""
         user = create_test_user()
         await repository.save(user)
