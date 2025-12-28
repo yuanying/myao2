@@ -26,3 +26,15 @@ class MessageModel(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("message_id", "channel_id", name="uq_message_channel"),
     )
+
+
+class UserModel(SQLModel, table=True):
+    """ユーザーテーブル"""
+
+    __tablename__ = "users"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: str = Field(unique=True, index=True)
+    name: str
+    is_bot: bool = False
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
