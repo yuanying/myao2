@@ -31,7 +31,7 @@ class LLMClient:
         """
         self._config = config
 
-    def complete(
+    async def complete(
         self,
         messages: list[dict[str, str]],
         **kwargs: Any,
@@ -62,7 +62,7 @@ class LLMClient:
         logger.debug("LLM request: model=%s", params["model"])
 
         try:
-            response = litellm.completion(**params)
+            response = await litellm.acompletion(**params)
             content = response.choices[0].message.content
             logger.debug("LLM response received")
             return content

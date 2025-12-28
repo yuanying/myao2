@@ -30,7 +30,7 @@ class LiteLLMResponseGenerator:
         self._client = client
         self._debug_llm_messages = debug_llm_messages
 
-    def generate(
+    async def generate(
         self,
         user_message: Message,
         context: Context,
@@ -54,7 +54,7 @@ class LiteLLMResponseGenerator:
         if self._should_log():
             self._log_messages(messages)
 
-        response = self._client.complete(messages)
+        response = await self._client.complete(messages)
 
         if self._should_log():
             self._log_response(response)

@@ -1,7 +1,7 @@
 """Tests for LiteLLMResponseGenerator."""
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -14,7 +14,7 @@ from myao2.infrastructure.llm import LiteLLMResponseGenerator, LLMClient, LLMErr
 def mock_client() -> MagicMock:
     """Create mock LLMClient."""
     client = MagicMock(spec=LLMClient)
-    client.complete.return_value = "Hello! Nice to meet you."
+    client.complete = AsyncMock(return_value="Hello! Nice to meet you.")
     return client
 
 
@@ -85,7 +85,7 @@ def sample_context(persona_config: PersonaConfig) -> Context:
 class TestLiteLLMResponseGenerator:
     """LiteLLMResponseGenerator tests."""
 
-    def test_generate_basic(
+    async def test_generate_basic(
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
@@ -93,15 +93,15 @@ class TestLiteLLMResponseGenerator:
         sample_context: Context,
     ) -> None:
         """Test basic response generation."""
-        result = generator.generate(
+        result = await generator.generate(
             user_message=user_message,
             context=sample_context,
         )
 
         assert result == "Hello! Nice to meet you."
-        mock_client.complete.assert_called_once()
+        mock_client.complete.assert_awaited_once()
 
-    def test_generate_uses_context_to_build_messages(
+    async def test_generate_uses_context_to_build_messages(
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
@@ -109,7 +109,7 @@ class TestLiteLLMResponseGenerator:
         sample_context: Context,
     ) -> None:
         """Test that Context.build_messages_for_llm is used."""
-        generator.generate(
+        await generator.generate(
             user_message=user_message,
             context=sample_context,
         )
@@ -124,7 +124,7 @@ class TestLiteLLMResponseGenerator:
         assert messages[1]["role"] == "user"
         assert messages[1]["content"] == "Hello"
 
-    def test_generate_with_conversation_history(
+    async def test_generate_with_conversation_history(
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
@@ -161,7 +161,7 @@ class TestLiteLLMResponseGenerator:
             conversation_history=history,
         )
 
-        generator.generate(
+        await generator.generate(
             user_message=user_message,
             context=context,
         )
@@ -179,7 +179,7 @@ class TestLiteLLMResponseGenerator:
         assert messages[3]["role"] == "user"
         assert messages[3]["content"] == "Hello"
 
-    def test_generate_propagates_error(
+    async def test_generate_propagates_error(
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
@@ -190,7 +190,7 @@ class TestLiteLLMResponseGenerator:
         mock_client.complete.side_effect = LLMError("API error")
 
         with pytest.raises(LLMError):
-            generator.generate(
+            await generator.generate(
                 user_message=user_message,
                 context=sample_context,
             )
