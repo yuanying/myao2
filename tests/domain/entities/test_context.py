@@ -292,6 +292,95 @@ class TestBuildMessagesForLlm:
         assert messages[3]["content"] == "Current"
 
 
+class TestDuplicateMessageHandling:
+    """Tests for handling duplicate messages in history."""
+
+    def test_skips_duplicate_user_message_in_history(
+        self,
+        persona_config: PersonaConfig,
+        sample_user: User,
+        sample_bot: User,
+        sample_channel: Channel,
+        timestamp: datetime,
+    ) -> None:
+        """Test that duplicate user message in history is skipped."""
+        current_message = create_test_message(
+            text="Hello",
+            user=sample_user,
+            channel=sample_channel,
+            timestamp=timestamp,
+            message_id="1234567890.000003",
+        )
+        # History already contains the current message
+        history = [
+            create_test_message(
+                text="Hi there!",
+                user=sample_user,
+                channel=sample_channel,
+                timestamp=timestamp,
+                message_id="1234567890.000001",
+            ),
+            create_test_message(
+                text="Hi! How can I help?",
+                user=sample_bot,
+                channel=sample_channel,
+                timestamp=timestamp,
+                message_id="1234567890.000002",
+            ),
+            current_message,  # This is the same message we're passing
+        ]
+        context = Context(
+            persona=persona_config,
+            conversation_history=history,
+        )
+
+        messages = context.build_messages_for_llm(current_message)
+
+        # Should have: system + 2 history + 1 current (not duplicated)
+        assert len(messages) == 4
+        assert messages[0]["role"] == "system"
+        assert messages[1]["content"] == "Hi there!"
+        assert messages[2]["content"] == "Hi! How can I help?"
+        assert messages[3]["content"] == "Hello"
+
+    def test_no_duplicate_when_history_ends_with_different_message(
+        self,
+        persona_config: PersonaConfig,
+        sample_user: User,
+        sample_bot: User,
+        sample_channel: Channel,
+        timestamp: datetime,
+    ) -> None:
+        """Test that no message is skipped when last history differs."""
+        history = [
+            create_test_message(
+                text="Previous message",
+                user=sample_user,
+                channel=sample_channel,
+                timestamp=timestamp,
+                message_id="1234567890.000001",
+            ),
+        ]
+        context = Context(
+            persona=persona_config,
+            conversation_history=history,
+        )
+        current_message = create_test_message(
+            text="Current message",
+            user=sample_user,
+            channel=sample_channel,
+            timestamp=timestamp,
+            message_id="1234567890.000002",
+        )
+
+        messages = context.build_messages_for_llm(current_message)
+
+        # Should have: system + 1 history + 1 current
+        assert len(messages) == 3
+        assert messages[1]["content"] == "Previous message"
+        assert messages[2]["content"] == "Current message"
+
+
 class TestContextImmutability:
     """Tests for Context immutability."""
 

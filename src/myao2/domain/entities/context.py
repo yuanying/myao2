@@ -42,7 +42,8 @@ class Context:
         """Build message list for LLM.
 
         Constructs an OpenAI-compatible message list from conversation history
-        and the current user message.
+        and the current user message. If the current message is already in
+        the conversation history, it will not be duplicated.
 
         Args:
             user_message: Current user message.
@@ -56,7 +57,12 @@ class Context:
         ]
 
         # Add conversation history (already in chronological order)
-        for msg in self.conversation_history:
+        # Skip the last message if it's the same as user_message to avoid duplication
+        history_to_process = self.conversation_history
+        if history_to_process and history_to_process[-1].id == user_message.id:
+            history_to_process = history_to_process[:-1]
+
+        for msg in history_to_process:
             role = "assistant" if msg.user.is_bot else "user"
             messages.append({"role": role, "content": msg.text})
 
