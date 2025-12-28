@@ -90,3 +90,12 @@ class MessageRepository(Protocol):
             メッセージ（存在しない場合は None）
         """
         ...
+
+    async def delete(self, message_id: str, channel_id: str) -> None:
+        """メッセージを削除する
+
+        Args:
+            message_id: メッセージ ID（Slack の ts）
+            channel_id: チャンネル ID
+        """
+        ...

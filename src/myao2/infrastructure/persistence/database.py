@@ -76,3 +76,13 @@ class DatabaseManager:
         assert self._session_factory is not None
         async with self._session_factory() as session:
             yield session
+
+    async def close(self) -> None:
+        """データベース接続をクローズする
+
+        エンジンの dispose() を呼び出し、すべての接続を解放する。
+        """
+        if self._engine is not None:
+            await self._engine.dispose()
+            self._engine = None
+            self._session_factory = None

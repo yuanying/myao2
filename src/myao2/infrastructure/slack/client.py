@@ -1,5 +1,7 @@
 """Slack Bolt client and runner."""
 
+import asyncio
+
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from slack_bolt.async_app import AsyncApp
 
@@ -45,3 +47,20 @@ class SlackAppRunner:
         """Stop the app."""
         if self._handler is not None:
             await self._handler.close_async()
+
+    async def close(self, timeout: float = 5.0) -> bool:
+        """Close the handler with timeout.
+
+        Args:
+            timeout: Maximum seconds to wait for close.
+
+        Returns:
+            True if closed successfully, False if timed out.
+        """
+        if self._handler is None:
+            return True
+        try:
+            await asyncio.wait_for(self._handler.close_async(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False

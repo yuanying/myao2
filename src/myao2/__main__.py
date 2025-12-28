@@ -2,14 +2,21 @@
 
 import asyncio
 import logging
+import signal
 import sys
 from pathlib import Path
 
-from myao2.application.use_cases import ReplyToMentionUseCase
+from myao2.application.services import PeriodicChecker
+from myao2.application.use_cases import AutonomousResponseUseCase, ReplyToMentionUseCase
 from myao2.config import ConfigError, LoggingConfig, load_config
-from myao2.infrastructure.llm import LiteLLMResponseGenerator, LLMClient
+from myao2.infrastructure.llm import (
+    LiteLLMResponseGenerator,
+    LLMClient,
+    LLMResponseJudgment,
+)
 from myao2.infrastructure.persistence import (
     DatabaseManager,
+    DBChannelMonitor,
     DBConversationHistoryService,
     SQLiteChannelRepository,
     SQLiteMessageRepository,
@@ -17,6 +24,7 @@ from myao2.infrastructure.persistence import (
 )
 from myao2.infrastructure.slack import (
     SlackAppRunner,
+    SlackChannelInitializer,
     SlackEventAdapter,
     SlackMessagingService,
     create_slack_app,
@@ -116,7 +124,7 @@ async def main() -> None:
         debug_llm_messages=debug_llm_messages,
     )
 
-    # Initialize use case
+    # Initialize use case for mention replies
     reply_use_case = ReplyToMentionUseCase(
         messaging_service=messaging_service,
         response_generator=response_generator,
@@ -126,16 +134,94 @@ async def main() -> None:
         bot_user_id=bot_user_id,
     )
 
-    register_handlers(app, reply_use_case, event_adapter, bot_user_id)
+    register_handlers(
+        app, reply_use_case, event_adapter, bot_user_id, message_repository
+    )
 
-    logger.info("Starting %s...", config.persona.name)
+    # Sync channels from Slack at startup
+    channel_initializer = SlackChannelInitializer(
+        client=app.client,
+        channel_repository=channel_repository,
+    )
+    await channel_initializer.sync_channels()
+
+    # Initialize autonomous response components
+    # Use judgment LLM config if available, otherwise use default
+    judgment_llm_config = config.llm.get("judgment", config.llm["default"])
+    judgment_llm_client = LLMClient(judgment_llm_config)
+    response_judgment = LLMResponseJudgment(client=judgment_llm_client)
+
+    channel_monitor = DBChannelMonitor(
+        message_repository=message_repository,
+        channel_repository=channel_repository,
+        bot_user_id=bot_user_id,
+    )
+
+    autonomous_response_use_case = AutonomousResponseUseCase(
+        channel_monitor=channel_monitor,
+        response_judgment=response_judgment,
+        response_generator=response_generator,
+        messaging_service=messaging_service,
+        message_repository=message_repository,
+        conversation_history_service=conversation_history_service,
+        config=config,
+        bot_user_id=bot_user_id,
+    )
+
+    periodic_checker = PeriodicChecker(
+        autonomous_response_use_case=autonomous_response_use_case,
+        config=config.response,
+    )
+
     runner = SlackAppRunner(app, config.slack.app_token)
 
-    try:
-        await runner.start()
-    finally:
-        logger.info("Shutting down...")
-        await runner.stop()
+    logger.info("Starting %s...", config.persona.name)
+    logger.info("Starting Socket Mode handler...")
+    logger.info(
+        "Starting periodic checker (interval: %ds)...",
+        config.response.check_interval_seconds,
+    )
+
+    # Create tasks
+    runner_task = asyncio.create_task(runner.start())
+    checker_task = asyncio.create_task(periodic_checker.start())
+
+    # Setup signal handlers for graceful shutdown
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    def shutdown_handler() -> None:
+        logger.info("Received shutdown signal...")
+        stop_event.set()
+
+    loop.add_signal_handler(signal.SIGINT, shutdown_handler)
+    loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
+
+    # Wait for shutdown signal
+    await stop_event.wait()
+
+    # Graceful shutdown
+    logger.info("Shutting down...")
+
+    # Stop periodic checker (has graceful stop)
+    await periodic_checker.stop()
+
+    # Try to close runner with timeout
+    closed = await runner.close(timeout=5.0)
+    if not closed:
+        logger.warning("Runner close timed out, cancelling tasks...")
+
+    # Cancel any remaining tasks
+    runner_task.cancel()
+    checker_task.cancel()
+
+    # Wait for tasks to complete
+    await asyncio.gather(runner_task, checker_task, return_exceptions=True)
+
+    # Close database connections
+    await db_manager.close()
+
+    logger.info("Shutdown complete")
 
 
 def run() -> None:
