@@ -7,7 +7,13 @@ from typing import Any
 
 import yaml
 
-from myao2.config.models import Config, LLMConfig, PersonaConfig, SlackConfig
+from myao2.config.models import (
+    Config,
+    LLMConfig,
+    MemoryConfig,
+    PersonaConfig,
+    SlackConfig,
+)
 
 
 class ConfigError(Exception):
@@ -148,4 +154,13 @@ def load_config(path: str | Path) -> Config:
         ),
     )
 
-    return Config(slack=slack, llm=llm, persona=persona)
+    # MemoryConfig
+    memory_data = _validate_required_field(data, "memory")
+    memory = MemoryConfig(
+        database_path=_validate_required_field(memory_data, "database_path", "memory"),
+        long_term_update_interval_seconds=memory_data.get(
+            "long_term_update_interval_seconds", 3600
+        ),
+    )
+
+    return Config(slack=slack, llm=llm, persona=persona, memory=memory)

@@ -29,9 +29,18 @@ class PersonaConfig:
 
 
 @dataclass
+class MemoryConfig:
+    """記憶設定"""
+
+    database_path: str
+    long_term_update_interval_seconds: int = 3600
+
+
+@dataclass
 class Config:
     """アプリケーション設定"""
 
     slack: SlackConfig
     llm: dict[str, LLMConfig]
     persona: PersonaConfig
+    memory: MemoryConfig
