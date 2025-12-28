@@ -13,6 +13,7 @@ from myao2.config.models import (
     LoggingConfig,
     MemoryConfig,
     PersonaConfig,
+    ResponseConfig,
     SlackConfig,
 )
 
@@ -25,6 +26,7 @@ __all__ = [
     "LoggingConfig",
     "MemoryConfig",
     "PersonaConfig",
+    "ResponseConfig",
     "SlackConfig",
     "expand_env_vars",
     "load_config",

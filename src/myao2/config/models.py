@@ -47,6 +47,14 @@ class LoggingConfig:
 
 
 @dataclass
+class ResponseConfig:
+    """自律応答設定"""
+
+    check_interval_seconds: int = 60
+    min_wait_seconds: int = 300
+
+
+@dataclass
 class Config:
     """アプリケーション設定"""
 
@@ -54,4 +62,5 @@ class Config:
     llm: dict[str, LLMConfig]
     persona: PersonaConfig
     memory: MemoryConfig
+    response: ResponseConfig
     logging: LoggingConfig | None = None

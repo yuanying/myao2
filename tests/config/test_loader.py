@@ -14,6 +14,7 @@ from myao2.config import (
     LLMConfig,
     MemoryConfig,
     PersonaConfig,
+    ResponseConfig,
     SlackConfig,
     expand_env_vars,
     load_config,
@@ -377,10 +378,121 @@ class TestDataClasses:
         llm = {"default": LLMConfig(model="gpt-4o")}
         persona = PersonaConfig(name="myao", system_prompt="test")
         memory = MemoryConfig(database_path="./data/memory.db")
+        response = ResponseConfig()
 
-        config = Config(slack=slack, llm=llm, persona=persona, memory=memory)
+        config = Config(
+            slack=slack, llm=llm, persona=persona, memory=memory, response=response
+        )
 
         assert config.slack == slack
         assert config.llm == llm
         assert config.persona == persona
         assert config.memory == memory
+        assert config.response == response
+
+    def test_response_config_with_defaults(self) -> None:
+        """ResponseConfigのデフォルト値が正しい"""
+        config = ResponseConfig()
+        assert config.check_interval_seconds == 60
+        assert config.min_wait_seconds == 300
+
+    def test_response_config_custom_values(self) -> None:
+        """ResponseConfigのカスタム値が設定できる"""
+        config = ResponseConfig(check_interval_seconds=30, min_wait_seconds=600)
+        assert config.check_interval_seconds == 30
+        assert config.min_wait_seconds == 600
+
+
+class TestLoadConfigWithResponse:
+    """load_config関数のResponseConfigテスト"""
+
+    def test_load_config_with_response_section(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """responseセクションありの設定ファイルを読み込める"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+
+response:
+  check_interval_seconds: 30
+  min_wait_seconds: 600
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.response.check_interval_seconds == 30
+        assert config.response.min_wait_seconds == 600
+
+    def test_load_config_without_response_section(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """responseセクションなしの場合はデフォルト値が使用される"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.response.check_interval_seconds == 60
+        assert config.response.min_wait_seconds == 300
+
+    def test_load_config_with_partial_response_section(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """responseセクションが部分的な場合、残りはデフォルト値が使用される"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+
+response:
+  check_interval_seconds: 120
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.response.check_interval_seconds == 120
+        assert config.response.min_wait_seconds == 300
