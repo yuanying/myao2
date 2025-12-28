@@ -12,7 +12,7 @@ class MessageRepository(Protocol):
     永続化層の実装詳細を隠蔽する。
     """
 
-    def save(self, message: Message) -> None:
+    async def save(self, message: Message) -> None:
         """メッセージを保存する
 
         既存のメッセージ（同一の message_id, channel_id）が存在する場合は更新する。
@@ -22,7 +22,7 @@ class MessageRepository(Protocol):
         """
         ...
 
-    def find_by_channel(
+    async def find_by_channel(
         self,
         channel_id: str,
         limit: int = 20,
@@ -40,7 +40,7 @@ class MessageRepository(Protocol):
         """
         ...
 
-    def find_by_thread(
+    async def find_by_thread(
         self,
         channel_id: str,
         thread_ts: str,
@@ -58,7 +58,7 @@ class MessageRepository(Protocol):
         """
         ...
 
-    def find_by_id(self, message_id: str, channel_id: str) -> Message | None:
+    async def find_by_id(self, message_id: str, channel_id: str) -> Message | None:
         """ID でメッセージを検索する
 
         Args:
