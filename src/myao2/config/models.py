@@ -52,6 +52,7 @@ class ResponseConfig:
 
     check_interval_seconds: int = 60
     min_wait_seconds: int = 300
+    message_limit: int = 20
 
 
 @dataclass

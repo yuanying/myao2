@@ -395,12 +395,16 @@ class TestDataClasses:
         config = ResponseConfig()
         assert config.check_interval_seconds == 60
         assert config.min_wait_seconds == 300
+        assert config.message_limit == 20
 
     def test_response_config_custom_values(self) -> None:
         """ResponseConfigのカスタム値が設定できる"""
-        config = ResponseConfig(check_interval_seconds=30, min_wait_seconds=600)
+        config = ResponseConfig(
+            check_interval_seconds=30, min_wait_seconds=600, message_limit=50
+        )
         assert config.check_interval_seconds == 30
         assert config.min_wait_seconds == 600
+        assert config.message_limit == 50
 
 
 class TestLoadConfigWithResponse:
@@ -429,6 +433,7 @@ memory:
 response:
   check_interval_seconds: 30
   min_wait_seconds: 600
+  message_limit: 50
 """
         config_path = temp_config_dir / "config.yaml"
         config_path.write_text(config_content)
@@ -437,6 +442,7 @@ response:
 
         assert config.response.check_interval_seconds == 30
         assert config.response.min_wait_seconds == 600
+        assert config.response.message_limit == 50
 
     def test_load_config_without_response_section(
         self, temp_config_dir: Path, env_vars: dict[str, str]
@@ -465,6 +471,7 @@ memory:
 
         assert config.response.check_interval_seconds == 60
         assert config.response.min_wait_seconds == 300
+        assert config.response.message_limit == 20
 
     def test_load_config_with_partial_response_section(
         self, temp_config_dir: Path, env_vars: dict[str, str]
