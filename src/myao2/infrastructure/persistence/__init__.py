@@ -1,5 +1,6 @@
 """Persistence infrastructure."""
 
+from myao2.infrastructure.persistence.channel_monitor import DBChannelMonitor
 from myao2.infrastructure.persistence.channel_repository import (
     SQLiteChannelRepository,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "ChannelModel",
     "DatabaseError",
     "DatabaseManager",
+    "DBChannelMonitor",
     "DBConversationHistoryService",
     "MessageModel",
     "PersistenceError",
