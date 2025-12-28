@@ -5,6 +5,9 @@ from myao2.infrastructure.persistence.exceptions import (
     DatabaseError,
     PersistenceError,
 )
+from myao2.infrastructure.persistence.message_repository import (
+    SQLiteMessageRepository,
+)
 from myao2.infrastructure.persistence.models import MessageModel
 
 __all__ = [
@@ -12,4 +15,5 @@ __all__ = [
     "DatabaseManager",
     "MessageModel",
     "PersistenceError",
+    "SQLiteMessageRepository",
 ]

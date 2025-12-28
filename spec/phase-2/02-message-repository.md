@@ -316,10 +316,10 @@ def create_test_message(
 
 ## 完了基準
 
-- [ ] SQLiteMessageRepository が実装されている
-- [ ] save で新規保存・更新が正しく動作する
-- [ ] find_by_channel でスレッド外メッセージのみ取得できる
-- [ ] find_by_thread で指定スレッドのメッセージを取得できる
-- [ ] find_by_id で単一メッセージを取得できる
-- [ ] エンティティとモデルの相互変換ができる
-- [ ] 全テストケースが通過する
+- [x] SQLiteMessageRepository が実装されている
+- [x] save で新規保存・更新が正しく動作する
+- [x] find_by_channel でスレッド外メッセージのみ取得できる
+- [x] find_by_thread で指定スレッドのメッセージを取得できる
+- [x] find_by_id で単一メッセージを取得できる
+- [x] エンティティとモデルの相互変換ができる
+- [x] 全テストケースが通過する
