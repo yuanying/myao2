@@ -1,5 +1,6 @@
 """アプリケーションのエントリポイント"""
 
+import asyncio
 import logging
 import sys
 from pathlib import Path
@@ -58,7 +59,7 @@ def configure_logging(config: LoggingConfig | None) -> None:
             )
 
 
-def main() -> None:
+async def main() -> None:
     """アプリケーションを起動する"""
     config_path = Path("config.yaml")
     if not config_path.exists():
@@ -77,16 +78,15 @@ def main() -> None:
     app = create_slack_app(config.slack)
 
     # Get bot user ID
-    auth_result = app.client.auth_test()
-    bot_user_id = auth_result["user_id"]
+    messaging_service = SlackMessagingService(app.client)
+    bot_user_id = await messaging_service.get_bot_user_id()
     logger.info("Bot user ID: %s", bot_user_id)
 
     # Initialize database
     db_manager = DatabaseManager(config.memory.database_path)
-    db_manager.create_tables()
+    await db_manager.create_tables()
 
     # Build dependencies
-    messaging_service = SlackMessagingService(app.client)
     event_adapter = SlackEventAdapter(app.client)
     conversation_history_service = SlackConversationHistoryService(app.client)
     message_repository = SQLiteMessageRepository(db_manager.get_session)
@@ -120,11 +120,19 @@ def main() -> None:
     runner = SlackAppRunner(app, config.slack.app_token)
 
     try:
-        runner.start()
+        await runner.start()
+    finally:
+        logger.info("Shutting down...")
+        await runner.stop()
+
+
+def run() -> None:
+    """Run the async main function."""
+    try:
+        asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Shutting down...")
-        runner.stop()
 
 
 if __name__ == "__main__":
-    main()
+    run()

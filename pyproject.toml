@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-myao2 = "myao2.__main__:main"
+myao2 = "myao2.__main__:run"
 
 [build-system]
 requires = ["hatchling"]
