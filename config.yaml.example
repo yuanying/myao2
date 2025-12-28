@@ -31,6 +31,17 @@ memory:
   database_path: "./data/memory.db"
   long_term_update_interval_seconds: 3600
 
+# ログ設定（オプショナル）
+logging:
+  level: INFO  # ルートログレベル（DEBUG, INFO, WARNING, ERROR, CRITICAL）
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  # LLMに渡すメッセージをINFOレベルで出力（開発時のデバッグ用）
+  debug_llm_messages: false
+  # 個別ロガーのレベル設定
+  loggers:
+    # 例: 特定のモジュールをDEBUGレベルに
+    # myao2.infrastructure.slack: DEBUG
+
 # 外部サービス設定
 external:
   web_search:

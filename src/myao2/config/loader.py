@@ -10,6 +10,7 @@ import yaml
 from myao2.config.models import (
     Config,
     LLMConfig,
+    LoggingConfig,
     MemoryConfig,
     PersonaConfig,
     SlackConfig,
@@ -163,4 +164,19 @@ def load_config(path: str | Path) -> Config:
         ),
     )
 
-    return Config(slack=slack, llm=llm, persona=persona, memory=memory)
+    # LoggingConfig (optional)
+    logging_config: LoggingConfig | None = None
+    logging_data = data.get("logging")
+    if logging_data:
+        logging_config = LoggingConfig(
+            level=logging_data.get("level", "INFO"),
+            format=logging_data.get(
+                "format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            ),
+            loggers=logging_data.get("loggers"),
+            debug_llm_messages=logging_data.get("debug_llm_messages", False),
+        )
+
+    return Config(
+        slack=slack, llm=llm, persona=persona, memory=memory, logging=logging_config
+    )

@@ -37,6 +37,16 @@ class MemoryConfig:
 
 
 @dataclass
+class LoggingConfig:
+    """ログ設定"""
+
+    level: str = "INFO"
+    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    loggers: dict[str, str] | None = None
+    debug_llm_messages: bool = False
+
+
+@dataclass
 class Config:
     """アプリケーション設定"""
 
@@ -44,3 +54,4 @@ class Config:
     llm: dict[str, LLMConfig]
     persona: PersonaConfig
     memory: MemoryConfig
+    logging: LoggingConfig | None = None
