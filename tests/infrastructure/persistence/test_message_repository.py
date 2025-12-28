@@ -1,12 +1,14 @@
 """Tests for SQLiteMessageRepository."""
 
 import json
-from contextlib import contextmanager
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Iterator
 
 import pytest
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
+from sqlmodel import SQLModel, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from myao2.domain.entities import Channel, Message, User
 from myao2.infrastructure.persistence import SQLiteMessageRepository
@@ -14,26 +16,26 @@ from myao2.infrastructure.persistence.models import MessageModel
 
 
 @pytest.fixture
-def engine():
-    """Create in-memory SQLite engine."""
-    engine = create_engine("sqlite:///:memory:")
-    SQLModel.metadata.create_all(engine)
-    return engine
+async def engine() -> AsyncGenerator[AsyncEngine, None]:
+    """Create in-memory SQLite async engine."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+    yield engine
+    await engine.dispose()
 
 
 @pytest.fixture
-def session_factory(engine):
-    """Create session factory."""
+def session_factory(engine: AsyncEngine):
+    """Create async session factory."""
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    @contextmanager
-    def factory() -> Iterator[Session]:
-        session = Session(engine)
-        try:
+    @asynccontextmanager
+    async def get_session() -> AsyncGenerator[AsyncSession, None]:
+        async with factory() as session:
             yield session
-        finally:
-            session.close()
 
-    return factory
+    return get_session
 
 
 @pytest.fixture
@@ -68,74 +70,80 @@ def create_test_message(
 class TestSave:
     """save method tests."""
 
-    def test_save_new_message(self, repository: SQLiteMessageRepository) -> None:
+    async def test_save_new_message(self, repository: SQLiteMessageRepository) -> None:
         """Test saving a new message."""
         message = create_test_message()
 
-        repository.save(message)
+        await repository.save(message)
 
-        found = repository.find_by_id(message.id, message.channel.id)
+        found = await repository.find_by_id(message.id, message.channel.id)
         assert found is not None
         assert found.id == message.id
         assert found.text == message.text
         assert found.user.id == message.user.id
 
-    def test_save_updates_existing_message(
+    async def test_save_updates_existing_message(
         self, repository: SQLiteMessageRepository
     ) -> None:
         """Test that save updates existing message with same ID."""
         message = create_test_message(text="Original text")
-        repository.save(message)
+        await repository.save(message)
 
         # Update message text
         updated_message = create_test_message(text="Updated text")
-        repository.save(updated_message)
+        await repository.save(updated_message)
 
-        found = repository.find_by_id(message.id, message.channel.id)
+        found = await repository.find_by_id(message.id, message.channel.id)
         assert found is not None
         assert found.text == "Updated text"
 
-    def test_save_multiple_messages(self, repository: SQLiteMessageRepository) -> None:
+    async def test_save_multiple_messages(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
         """Test saving multiple different messages."""
         message1 = create_test_message(id="1.001", text="First message")
         message2 = create_test_message(id="1.002", text="Second message")
         message3 = create_test_message(id="1.003", text="Third message")
 
-        repository.save(message1)
-        repository.save(message2)
-        repository.save(message3)
+        await repository.save(message1)
+        await repository.save(message2)
+        await repository.save(message3)
 
-        assert repository.find_by_id("1.001", "C123456") is not None
-        assert repository.find_by_id("1.002", "C123456") is not None
-        assert repository.find_by_id("1.003", "C123456") is not None
+        assert await repository.find_by_id("1.001", "C123456") is not None
+        assert await repository.find_by_id("1.002", "C123456") is not None
+        assert await repository.find_by_id("1.003", "C123456") is not None
 
-    def test_save_with_mentions(self, repository: SQLiteMessageRepository) -> None:
+    async def test_save_with_mentions(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
         """Test saving message with mentions."""
         message = create_test_message(mentions=["U111", "U222", "U333"])
 
-        repository.save(message)
+        await repository.save(message)
 
-        found = repository.find_by_id(message.id, message.channel.id)
+        found = await repository.find_by_id(message.id, message.channel.id)
         assert found is not None
         assert found.mentions == ["U111", "U222", "U333"]
 
-    def test_save_thread_message(self, repository: SQLiteMessageRepository) -> None:
+    async def test_save_thread_message(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
         """Test saving a thread message."""
         message = create_test_message(thread_ts="1234567890.000000")
 
-        repository.save(message)
+        await repository.save(message)
 
-        found = repository.find_by_id(message.id, message.channel.id)
+        found = await repository.find_by_id(message.id, message.channel.id)
         assert found is not None
         assert found.thread_ts == "1234567890.000000"
 
-    def test_save_bot_message(self, repository: SQLiteMessageRepository) -> None:
+    async def test_save_bot_message(self, repository: SQLiteMessageRepository) -> None:
         """Test saving a bot message."""
         message = create_test_message(is_bot=True, user_name="myao")
 
-        repository.save(message)
+        await repository.save(message)
 
-        found = repository.find_by_id(message.id, message.channel.id)
+        found = await repository.find_by_id(message.id, message.channel.id)
         assert found is not None
         assert found.user.is_bot is True
 
@@ -143,7 +151,7 @@ class TestSave:
 class TestFindByChannel:
     """find_by_channel method tests."""
 
-    def test_find_multiple_messages_newest_first(
+    async def test_find_multiple_messages_newest_first(
         self, repository: SQLiteMessageRepository
     ) -> None:
         """Test that messages are returned newest first."""
@@ -156,25 +164,25 @@ class TestFindByChannel:
             for i in range(5)
         ]
         for msg in messages:
-            repository.save(msg)
+            await repository.save(msg)
 
-        result = repository.find_by_channel("C123456")
+        result = await repository.find_by_channel("C123456")
 
         assert len(result) == 5
         # Newest first
         assert result[0].id == "1.004"
         assert result[4].id == "1.000"
 
-    def test_find_with_limit(self, repository: SQLiteMessageRepository) -> None:
+    async def test_find_with_limit(self, repository: SQLiteMessageRepository) -> None:
         """Test limit parameter."""
         for i in range(10):
-            repository.save(create_test_message(id=f"1.00{i}"))
+            await repository.save(create_test_message(id=f"1.00{i}"))
 
-        result = repository.find_by_channel("C123456", limit=3)
+        result = await repository.find_by_channel("C123456", limit=3)
 
         assert len(result) == 3
 
-    def test_find_excludes_thread_messages(
+    async def test_find_excludes_thread_messages(
         self, repository: SQLiteMessageRepository
     ) -> None:
         """Test that thread messages are excluded."""
@@ -184,32 +192,34 @@ class TestFindByChannel:
         thread_msg1 = create_test_message(id="1.002", thread_ts="1.000")
         thread_msg2 = create_test_message(id="1.003", thread_ts="1.000")
 
-        repository.save(channel_msg)
-        repository.save(thread_msg1)
-        repository.save(thread_msg2)
+        await repository.save(channel_msg)
+        await repository.save(thread_msg1)
+        await repository.save(thread_msg2)
 
-        result = repository.find_by_channel("C123456")
+        result = await repository.find_by_channel("C123456")
 
         assert len(result) == 1
         assert result[0].id == "1.001"
 
-    def test_find_empty_channel(self, repository: SQLiteMessageRepository) -> None:
+    async def test_find_empty_channel(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
         """Test finding in empty channel."""
-        result = repository.find_by_channel("C999999")
+        result = await repository.find_by_channel("C999999")
 
         assert result == []
 
-    def test_find_excludes_other_channels(
+    async def test_find_excludes_other_channels(
         self, repository: SQLiteMessageRepository
     ) -> None:
         """Test that messages from other channels are excluded."""
         msg_c1 = create_test_message(id="1.001", channel_id="C111111")
         msg_c2 = create_test_message(id="1.002", channel_id="C222222")
 
-        repository.save(msg_c1)
-        repository.save(msg_c2)
+        await repository.save(msg_c1)
+        await repository.save(msg_c2)
 
-        result = repository.find_by_channel("C111111")
+        result = await repository.find_by_channel("C111111")
 
         assert len(result) == 1
         assert result[0].channel.id == "C111111"
@@ -218,7 +228,7 @@ class TestFindByChannel:
 class TestFindByThread:
     """find_by_thread method tests."""
 
-    def test_find_thread_messages_newest_first(
+    async def test_find_thread_messages_newest_first(
         self, repository: SQLiteMessageRepository
     ) -> None:
         """Test that thread messages are returned newest first."""
@@ -233,42 +243,46 @@ class TestFindByThread:
             for i in range(3)
         ]
         for msg in messages:
-            repository.save(msg)
+            await repository.save(msg)
 
-        result = repository.find_by_thread("C123456", thread_ts)
+        result = await repository.find_by_thread("C123456", thread_ts)
 
         assert len(result) == 3
         assert result[0].id == "1.002"
         assert result[2].id == "1.000"
 
-    def test_find_thread_with_limit(self, repository: SQLiteMessageRepository) -> None:
+    async def test_find_thread_with_limit(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
         """Test limit parameter for thread."""
         thread_ts = "1.000"
         for i in range(5):
-            repository.save(create_test_message(id=f"1.00{i}", thread_ts=thread_ts))
+            await repository.save(
+                create_test_message(id=f"1.00{i}", thread_ts=thread_ts)
+            )
 
-        result = repository.find_by_thread("C123456", thread_ts, limit=2)
+        result = await repository.find_by_thread("C123456", thread_ts, limit=2)
 
         assert len(result) == 2
 
-    def test_find_excludes_other_threads(
+    async def test_find_excludes_other_threads(
         self, repository: SQLiteMessageRepository
     ) -> None:
         """Test that messages from other threads are excluded."""
         msg1 = create_test_message(id="1.001", thread_ts="thread_a")
         msg2 = create_test_message(id="1.002", thread_ts="thread_b")
 
-        repository.save(msg1)
-        repository.save(msg2)
+        await repository.save(msg1)
+        await repository.save(msg2)
 
-        result = repository.find_by_thread("C123456", "thread_a")
+        result = await repository.find_by_thread("C123456", "thread_a")
 
         assert len(result) == 1
         assert result[0].id == "1.001"
 
-    def test_find_empty_thread(self, repository: SQLiteMessageRepository) -> None:
+    async def test_find_empty_thread(self, repository: SQLiteMessageRepository) -> None:
         """Test finding in empty thread."""
-        result = repository.find_by_thread("C123456", "nonexistent_thread")
+        result = await repository.find_by_thread("C123456", "nonexistent_thread")
 
         assert result == []
 
@@ -276,31 +290,35 @@ class TestFindByThread:
 class TestFindById:
     """find_by_id method tests."""
 
-    def test_find_existing_message(self, repository: SQLiteMessageRepository) -> None:
+    async def test_find_existing_message(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
         """Test finding existing message by ID."""
         message = create_test_message()
-        repository.save(message)
+        await repository.save(message)
 
-        found = repository.find_by_id(message.id, message.channel.id)
+        found = await repository.find_by_id(message.id, message.channel.id)
 
         assert found is not None
         assert found.id == message.id
         assert found.text == message.text
 
-    def test_find_nonexistent_message(
+    async def test_find_nonexistent_message(
         self, repository: SQLiteMessageRepository
     ) -> None:
         """Test finding nonexistent message returns None."""
-        found = repository.find_by_id("nonexistent", "C123456")
+        found = await repository.find_by_id("nonexistent", "C123456")
 
         assert found is None
 
-    def test_find_wrong_channel(self, repository: SQLiteMessageRepository) -> None:
+    async def test_find_wrong_channel(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
         """Test that message with same ID but different channel returns None."""
         message = create_test_message(channel_id="C111111")
-        repository.save(message)
+        await repository.save(message)
 
-        found = repository.find_by_id(message.id, "C999999")
+        found = await repository.find_by_id(message.id, "C999999")
 
         assert found is None
 
@@ -308,7 +326,7 @@ class TestFindById:
 class TestConversion:
     """Entity/Model conversion tests."""
 
-    def test_to_entity_converts_all_fields(
+    async def test_to_entity_converts_all_fields(
         self, repository: SQLiteMessageRepository
     ) -> None:
         """Test that _to_entity converts all fields correctly."""
@@ -322,9 +340,9 @@ class TestConversion:
             thread_ts="1.000",
             mentions=["U111", "U222"],
         )
-        repository.save(message)
+        await repository.save(message)
 
-        found = repository.find_by_id("1.001", "C123")
+        found = await repository.find_by_id("1.001", "C123")
 
         assert found is not None
         assert found.id == "1.001"
@@ -336,19 +354,19 @@ class TestConversion:
         assert found.thread_ts == "1.000"
         assert found.mentions == ["U111", "U222"]
 
-    def test_to_entity_with_empty_mentions(
+    async def test_to_entity_with_empty_mentions(
         self, repository: SQLiteMessageRepository
     ) -> None:
         """Test that _to_entity handles empty mentions correctly."""
         message = create_test_message(mentions=[])
-        repository.save(message)
+        await repository.save(message)
 
-        found = repository.find_by_id(message.id, message.channel.id)
+        found = await repository.find_by_id(message.id, message.channel.id)
 
         assert found is not None
         assert found.mentions == []
 
-    def test_channel_name_is_empty_on_retrieve(
+    async def test_channel_name_is_empty_on_retrieve(
         self, repository: SQLiteMessageRepository
     ) -> None:
         """Test that channel name is empty string after retrieval."""
@@ -356,24 +374,25 @@ class TestConversion:
         # Original has channel name "general"
         assert message.channel.name == "general"
 
-        repository.save(message)
-        found = repository.find_by_id(message.id, message.channel.id)
+        await repository.save(message)
+        found = await repository.find_by_id(message.id, message.channel.id)
 
         # Retrieved has empty channel name (not persisted)
         assert found is not None
         assert found.channel.name == ""
 
-    def test_to_model_serializes_mentions_as_json(
+    async def test_to_model_serializes_mentions_as_json(
         self, session_factory, repository: SQLiteMessageRepository
     ) -> None:
         """Test that _to_model serializes mentions as JSON."""
         message = create_test_message(mentions=["U111", "U222"])
-        repository.save(message)
+        await repository.save(message)
 
         # Directly query the model to check JSON serialization
-        with session_factory() as session:
+        async with session_factory() as session:
             statement = select(MessageModel)
-            model = session.exec(statement).first()
+            result = await session.exec(statement)
+            model = result.first()
             assert model is not None
             assert model.mentions == '["U111", "U222"]'
             # Verify it's valid JSON

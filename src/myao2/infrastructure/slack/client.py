@@ -1,7 +1,7 @@
 """Slack Bolt client and runner."""
 
-from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
+from slack_bolt.async_app import AsyncApp
 
 from myao2.config import SlackConfig
 

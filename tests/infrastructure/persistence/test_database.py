@@ -3,7 +3,6 @@
 from pathlib import Path
 
 from sqlalchemy import inspect
-from sqlmodel import Session
 
 from myao2.infrastructure.persistence import DatabaseManager
 
@@ -30,64 +29,72 @@ class TestDatabaseManager:
 
         assert db_path.parent.exists()
 
-    def test_create_tables_first_time(self, tmp_path: Path) -> None:
+    async def test_create_tables_first_time(self, tmp_path: Path) -> None:
         """Test table creation on first run."""
         db_path = tmp_path / "test.db"
         manager = DatabaseManager(str(db_path))
-        manager.create_tables()
+        await manager.create_tables()
 
         engine = manager.get_engine()
-        inspector = inspect(engine)
-        tables = inspector.get_table_names()
+        async with engine.connect() as conn:
+            tables = await conn.run_sync(
+                lambda sync_conn: inspect(sync_conn).get_table_names()
+            )
 
         assert "messages" in tables
 
-    def test_create_tables_already_exists(self, tmp_path: Path) -> None:
+    async def test_create_tables_already_exists(self, tmp_path: Path) -> None:
         """Test table creation when tables already exist."""
         db_path = tmp_path / "test.db"
         manager = DatabaseManager(str(db_path))
 
         # Should not raise error on second call
-        manager.create_tables()
-        manager.create_tables()
+        await manager.create_tables()
+        await manager.create_tables()
 
         engine = manager.get_engine()
-        inspector = inspect(engine)
-        tables = inspector.get_table_names()
+        async with engine.connect() as conn:
+            tables = await conn.run_sync(
+                lambda sync_conn: inspect(sync_conn).get_table_names()
+            )
 
         assert "messages" in tables
 
-    def test_get_session(self, tmp_path: Path) -> None:
+    async def test_get_session(self, tmp_path: Path) -> None:
         """Test session creation."""
         db_path = tmp_path / "test.db"
         manager = DatabaseManager(str(db_path))
-        manager.create_tables()
+        await manager.create_tables()
 
-        session = manager.get_session()
+        async with manager.get_session() as session:
+            assert session is not None
 
-        assert isinstance(session, Session)
-        session.close()
-
-    def test_in_memory_database(self) -> None:
+    async def test_in_memory_database(self) -> None:
         """Test in-memory database."""
         manager = DatabaseManager(":memory:")
-        manager.create_tables()
+        await manager.create_tables()
 
         engine = manager.get_engine()
-        inspector = inspect(engine)
-        tables = inspector.get_table_names()
+        async with engine.connect() as conn:
+            tables = await conn.run_sync(
+                lambda sync_conn: inspect(sync_conn).get_table_names()
+            )
 
         assert "messages" in tables
 
-    def test_messages_table_has_correct_columns(self, tmp_path: Path) -> None:
+    async def test_messages_table_has_correct_columns(self, tmp_path: Path) -> None:
         """Test that messages table has correct columns."""
         db_path = tmp_path / "test.db"
         manager = DatabaseManager(str(db_path))
-        manager.create_tables()
+        await manager.create_tables()
 
         engine = manager.get_engine()
-        inspector = inspect(engine)
-        columns = {col["name"] for col in inspector.get_columns("messages")}
+        async with engine.connect() as conn:
+            columns = await conn.run_sync(
+                lambda sync_conn: {
+                    col["name"] for col in inspect(sync_conn).get_columns("messages")
+                }
+            )
 
         expected_columns = {
             "id",
@@ -104,15 +111,17 @@ class TestDatabaseManager:
         }
         assert columns == expected_columns
 
-    def test_messages_table_has_unique_constraint(self, tmp_path: Path) -> None:
+    async def test_messages_table_has_unique_constraint(self, tmp_path: Path) -> None:
         """Test that messages table has unique constraint."""
         db_path = tmp_path / "test.db"
         manager = DatabaseManager(str(db_path))
-        manager.create_tables()
+        await manager.create_tables()
 
         engine = manager.get_engine()
-        inspector = inspect(engine)
-        unique_constraints = inspector.get_unique_constraints("messages")
+        async with engine.connect() as conn:
+            unique_constraints = await conn.run_sync(
+                lambda sync_conn: inspect(sync_conn).get_unique_constraints("messages")
+            )
 
         constraint_names = [c["name"] for c in unique_constraints]
         assert "uq_message_channel" in constraint_names
