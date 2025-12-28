@@ -2,6 +2,50 @@
 
 from typing import Protocol
 
+from myao2.domain.entities import Message
+
+
+class ConversationHistoryService(Protocol):
+    """Conversation history retrieval abstraction (platform-independent).
+
+    This protocol defines the interface for fetching conversation history
+    from any messaging platform (Slack, Discord, etc.).
+    """
+
+    def fetch_thread_history(
+        self,
+        channel_id: str,
+        thread_ts: str,
+        limit: int = 20,
+    ) -> list[Message]:
+        """Fetch thread history.
+
+        Args:
+            channel_id: Channel ID.
+            thread_ts: Parent message timestamp.
+            limit: Maximum number of messages to fetch.
+
+        Returns:
+            List of messages in chronological order (oldest first).
+        """
+        ...
+
+    def fetch_channel_history(
+        self,
+        channel_id: str,
+        limit: int = 20,
+    ) -> list[Message]:
+        """Fetch channel history.
+
+        Args:
+            channel_id: Channel ID.
+            limit: Maximum number of messages to fetch.
+
+        Returns:
+            List of messages in chronological order (oldest first).
+        """
+        ...
+
 
 class MessagingService(Protocol):
     """Messaging abstraction (platform-independent).
