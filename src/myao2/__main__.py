@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from myao2.application.use_cases import ReplyToMentionUseCase
-from myao2.config import ConfigError, load_config
+from myao2.config import ConfigError, LoggingConfig, load_config
 from myao2.infrastructure.llm import LiteLLMResponseGenerator, LLMClient
 from myao2.infrastructure.persistence import DatabaseManager, SQLiteMessageRepository
 from myao2.infrastructure.slack import (
@@ -17,11 +17,45 @@ from myao2.infrastructure.slack import (
 )
 from myao2.presentation import register_handlers
 
+# Default logging for early startup
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def configure_logging(config: LoggingConfig | None) -> None:
+    """Configure logging based on config.
+
+    Args:
+        config: Logging configuration. If None, uses defaults.
+    """
+    if config is None:
+        return
+
+    # Get root logger
+    root_logger = logging.getLogger()
+
+    # Set root level
+    level = getattr(logging, config.level.upper(), logging.INFO)
+    root_logger.setLevel(level)
+
+    # Update handler format if specified
+    if root_logger.handlers:
+        formatter = logging.Formatter(config.format)
+        for handler in root_logger.handlers:
+            handler.setFormatter(formatter)
+
+    # Configure individual loggers
+    if config.loggers:
+        for logger_name, logger_level in config.loggers.items():
+            individual_logger = logging.getLogger(logger_name)
+            individual_level = getattr(logging, logger_level.upper(), logging.INFO)
+            individual_logger.setLevel(individual_level)
+            logger.debug(
+                "Set logger '%s' to level %s", logger_name, logger_level.upper()
+            )
 
 
 def main() -> None:
@@ -36,6 +70,9 @@ def main() -> None:
     except ConfigError as e:
         logger.error("Failed to load config: %s", e)
         sys.exit(1)
+
+    # Apply logging configuration
+    configure_logging(config.logging)
 
     app = create_slack_app(config.slack)
 
@@ -61,7 +98,11 @@ def main() -> None:
 
     llm_config = config.llm["default"]
     llm_client = LLMClient(llm_config)
-    response_generator = LiteLLMResponseGenerator(llm_client)
+    debug_llm_messages = bool(config.logging and config.logging.debug_llm_messages)
+    response_generator = LiteLLMResponseGenerator(
+        llm_client,
+        debug_llm_messages=debug_llm_messages,
+    )
 
     # Initialize use case
     reply_use_case = ReplyToMentionUseCase(
