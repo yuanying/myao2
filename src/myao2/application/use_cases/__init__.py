@@ -1,5 +1,6 @@
 """Use cases."""
 
+from myao2.application.use_cases.autonomous_response import AutonomousResponseUseCase
 from myao2.application.use_cases.reply_to_mention import ReplyToMentionUseCase
 
-__all__ = ["ReplyToMentionUseCase"]
+__all__ = ["AutonomousResponseUseCase", "ReplyToMentionUseCase"]
