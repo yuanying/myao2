@@ -242,9 +242,9 @@ def create_test_message(
 
 ## 完了基準
 
-- [ ] Context エンティティが定義されている
-- [ ] build_system_prompt でペルソナのプロンプトが返される
-- [ ] build_messages_for_llm で正しい形式のメッセージリストが生成される
-- [ ] 会話履歴が古い順で含まれる
-- [ ] ボットメッセージは role="assistant" で設定される
-- [ ] 全テストケースが通過する
+- [x] Context エンティティが定義されている
+- [x] build_system_prompt でペルソナのプロンプトが返される
+- [x] build_messages_for_llm で正しい形式のメッセージリストが生成される
+- [x] 会話履歴が古い順で含まれる
+- [x] ボットメッセージは role="assistant" で設定される
+- [x] 全テストケースが通過する
