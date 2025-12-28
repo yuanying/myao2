@@ -3,7 +3,7 @@
 import re
 from datetime import datetime, timezone
 
-from slack_sdk import WebClient
+from slack_sdk.web.async_client import AsyncWebClient
 
 from myao2.domain.entities import Channel, Message, User
 
@@ -25,15 +25,15 @@ class SlackConversationHistoryService:
         }
     )
 
-    def __init__(self, client: WebClient) -> None:
+    def __init__(self, client: AsyncWebClient) -> None:
         """Initialize the service.
 
         Args:
-            client: Slack WebClient.
+            client: Slack AsyncWebClient.
         """
         self._client = client
 
-    def fetch_thread_history(
+    async def fetch_thread_history(
         self,
         channel_id: str,
         thread_ts: str,
@@ -52,7 +52,7 @@ class SlackConversationHistoryService:
         Returns:
             List of messages in chronological order (oldest first).
         """
-        response = self._client.conversations_replies(
+        response = await self._client.conversations_replies(
             channel=channel_id,
             ts=thread_ts,
             limit=limit,
@@ -62,11 +62,11 @@ class SlackConversationHistoryService:
         for msg in response.get("messages", []):
             if msg.get("subtype") in self.EXCLUDED_SUBTYPES:
                 continue
-            messages.append(self._to_message(msg, channel_id))
+            messages.append(await self._to_message(msg, channel_id))
 
         return messages  # Already in chronological order
 
-    def fetch_channel_history(
+    async def fetch_channel_history(
         self,
         channel_id: str,
         limit: int = 20,
@@ -82,7 +82,7 @@ class SlackConversationHistoryService:
         Returns:
             List of messages in chronological order (oldest first).
         """
-        response = self._client.conversations_history(
+        response = await self._client.conversations_history(
             channel=channel_id,
             limit=limit,
         )
@@ -91,12 +91,12 @@ class SlackConversationHistoryService:
         for msg in response.get("messages", []):
             if msg.get("subtype") in self.EXCLUDED_SUBTYPES:
                 continue
-            messages.append(self._to_message(msg, channel_id))
+            messages.append(await self._to_message(msg, channel_id))
 
         # API returns newest first, so reverse to chronological order
         return list(reversed(messages))
 
-    def _to_message(self, msg: dict, channel_id: str) -> Message:
+    async def _to_message(self, msg: dict, channel_id: str) -> Message:
         """Convert Slack API response to Message entity.
 
         Args:
@@ -108,7 +108,7 @@ class SlackConversationHistoryService:
         """
         user_id = msg.get("user", "")
         if user_id:
-            user = self._get_user_info(user_id)
+            user = await self._get_user_info(user_id)
         else:
             user = User(id="", name="Unknown", is_bot=True)
 
@@ -125,7 +125,7 @@ class SlackConversationHistoryService:
             mentions=self._extract_mentions(msg.get("text", "")),
         )
 
-    def _get_user_info(self, user_id: str) -> User:
+    async def _get_user_info(self, user_id: str) -> User:
         """Get user information.
 
         Args:
@@ -134,7 +134,7 @@ class SlackConversationHistoryService:
         Returns:
             User entity.
         """
-        user_info = self._client.users_info(user=user_id)
+        user_info = await self._client.users_info(user=user_id)
         user_data = user_info["user"]
 
         return User(

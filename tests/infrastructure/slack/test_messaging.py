@@ -1,6 +1,6 @@
 """Tests for SlackMessagingService."""
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from slack_sdk.errors import SlackApiError
@@ -13,9 +13,10 @@ class TestSlackMessagingService:
 
     @pytest.fixture
     def mock_client(self) -> MagicMock:
-        """Create mock Slack WebClient."""
+        """Create mock Slack AsyncWebClient."""
         client = MagicMock()
-        client.auth_test.return_value = {"user_id": "UBOT123"}
+        client.chat_postMessage = AsyncMock()
+        client.auth_test = AsyncMock(return_value={"user_id": "UBOT123"})
         return client
 
     @pytest.fixture
@@ -23,38 +24,38 @@ class TestSlackMessagingService:
         """Create service instance."""
         return SlackMessagingService(client=mock_client)
 
-    def test_send_message_to_channel(
+    async def test_send_message_to_channel(
         self, service: SlackMessagingService, mock_client: MagicMock
     ) -> None:
         """Test sending message to channel."""
-        service.send_message(
+        await service.send_message(
             channel_id="C123456",
             text="Hello, world!",
         )
 
-        mock_client.chat_postMessage.assert_called_once_with(
+        mock_client.chat_postMessage.assert_awaited_once_with(
             channel="C123456",
             text="Hello, world!",
             thread_ts=None,
         )
 
-    def test_send_message_to_thread(
+    async def test_send_message_to_thread(
         self, service: SlackMessagingService, mock_client: MagicMock
     ) -> None:
         """Test sending message to thread."""
-        service.send_message(
+        await service.send_message(
             channel_id="C123456",
             text="Thread reply",
             thread_ts="1234567890.123456",
         )
 
-        mock_client.chat_postMessage.assert_called_once_with(
+        mock_client.chat_postMessage.assert_awaited_once_with(
             channel="C123456",
             text="Thread reply",
             thread_ts="1234567890.123456",
         )
 
-    def test_send_message_api_error(
+    async def test_send_message_api_error(
         self, service: SlackMessagingService, mock_client: MagicMock
     ) -> None:
         """Test that API errors are propagated."""
@@ -64,25 +65,25 @@ class TestSlackMessagingService:
         )
 
         with pytest.raises(SlackApiError):
-            service.send_message(
+            await service.send_message(
                 channel_id="C123456",
                 text="Hello",
             )
 
-    def test_get_bot_user_id(
+    async def test_get_bot_user_id(
         self, service: SlackMessagingService, mock_client: MagicMock
     ) -> None:
         """Test getting bot user ID."""
-        bot_id = service.get_bot_user_id()
+        bot_id = await service.get_bot_user_id()
 
         assert bot_id == "UBOT123"
-        mock_client.auth_test.assert_called_once()
+        mock_client.auth_test.assert_awaited_once()
 
-    def test_get_bot_user_id_cached(
+    async def test_get_bot_user_id_cached(
         self, service: SlackMessagingService, mock_client: MagicMock
     ) -> None:
         """Test that bot user ID is cached."""
-        service.get_bot_user_id()
-        service.get_bot_user_id()
+        await service.get_bot_user_id()
+        await service.get_bot_user_id()
 
-        mock_client.auth_test.assert_called_once()
+        mock_client.auth_test.assert_awaited_once()

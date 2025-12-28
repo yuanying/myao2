@@ -1,7 +1,7 @@
 """Tests for SlackEventAdapter."""
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -14,15 +14,17 @@ class TestSlackEventAdapter:
 
     @pytest.fixture
     def mock_client(self) -> MagicMock:
-        """Create mock Slack WebClient."""
+        """Create mock Slack AsyncWebClient."""
         client = MagicMock()
-        client.users_info.return_value = {
-            "user": {
-                "id": "U123456",
-                "name": "testuser",
-                "is_bot": False,
+        client.users_info = AsyncMock(
+            return_value={
+                "user": {
+                    "id": "U123456",
+                    "name": "testuser",
+                    "is_bot": False,
+                }
             }
-        }
+        )
         return client
 
     @pytest.fixture
@@ -30,7 +32,7 @@ class TestSlackEventAdapter:
         """Create adapter instance."""
         return SlackEventAdapter(client=mock_client)
 
-    def test_to_message_basic(
+    async def test_to_message_basic(
         self, adapter: SlackEventAdapter, mock_client: MagicMock
     ) -> None:
         """Test basic event to message conversion."""
@@ -42,7 +44,7 @@ class TestSlackEventAdapter:
             "channel": "C123456",
         }
 
-        message = adapter.to_message(event)
+        message = await adapter.to_message(event)
 
         assert isinstance(message, Message)
         assert message.id == "1234567890.123456"
@@ -53,7 +55,7 @@ class TestSlackEventAdapter:
         assert message.thread_ts is None
         assert "UBOT123" in message.mentions
 
-    def test_to_message_in_thread(
+    async def test_to_message_in_thread(
         self, adapter: SlackEventAdapter, mock_client: MagicMock
     ) -> None:
         """Test event to message conversion for thread message."""
@@ -66,22 +68,24 @@ class TestSlackEventAdapter:
             "thread_ts": "1234567890.000000",
         }
 
-        message = adapter.to_message(event)
+        message = await adapter.to_message(event)
 
         assert message.thread_ts == "1234567890.000000"
         assert message.is_in_thread() is True
 
-    def test_to_message_bot_user(
+    async def test_to_message_bot_user(
         self, adapter: SlackEventAdapter, mock_client: MagicMock
     ) -> None:
         """Test event to message conversion for bot user."""
-        mock_client.users_info.return_value = {
-            "user": {
-                "id": "UBOT456",
-                "name": "bot",
-                "is_bot": True,
+        mock_client.users_info = AsyncMock(
+            return_value={
+                "user": {
+                    "id": "UBOT456",
+                    "name": "bot",
+                    "is_bot": True,
+                }
             }
-        }
+        )
         event = {
             "type": "app_mention",
             "user": "UBOT456",
@@ -90,11 +94,13 @@ class TestSlackEventAdapter:
             "channel": "C123456",
         }
 
-        message = adapter.to_message(event)
+        message = await adapter.to_message(event)
 
         assert message.user.is_bot is True
 
-    def test_to_message_timestamp_conversion(self, adapter: SlackEventAdapter) -> None:
+    async def test_to_message_timestamp_conversion(
+        self, adapter: SlackEventAdapter
+    ) -> None:
         """Test that timestamp is properly converted."""
         event = {
             "type": "app_mention",
@@ -104,7 +110,7 @@ class TestSlackEventAdapter:
             "channel": "C123456",
         }
 
-        message = adapter.to_message(event)
+        message = await adapter.to_message(event)
 
         assert isinstance(message.timestamp, datetime)
         assert message.timestamp.tzinfo == timezone.utc
