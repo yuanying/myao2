@@ -20,6 +20,7 @@
 
 - タスク 02（メッセージリポジトリ実装）
 - タスク 03（Slack履歴取得）
+- タスク 03a（Context ドメインモデル）
 - タスク 04（コンテキスト付き応答生成）
 
 ---
@@ -65,9 +66,10 @@ class ReplyToMentionUseCase:
         2. メンションがなければ無視
         3. 受信メッセージを保存
         4. 会話履歴を取得（スレッド or チャンネル）
-        5. コンテキスト付きで応答を生成
-        6. 応答を送信
-        7. 応答メッセージを保存
+        5. Context を構築
+        6. コンテキスト付きで応答を生成
+        7. 応答を送信
+        8. 応答メッセージを保存
 
         Args:
             message: 受信したメッセージ
@@ -84,6 +86,16 @@ class ReplyToMentionUseCase:
 
         Returns:
             会話履歴（古い順）
+        """
+
+    def _build_context(self, conversation_history: list[Message]) -> Context:
+        """Context を構築する
+
+        Args:
+            conversation_history: 会話履歴
+
+        Returns:
+            Context インスタンス
         """
 
     def _create_bot_message(
@@ -124,21 +136,23 @@ def execute(self, message: Message) -> None:
     # 4. 会話履歴を取得
     conversation_history = self._get_conversation_history(message)
 
-    # 5. コンテキスト付きで応答を生成
+    # 5. Context を構築
+    context = self._build_context(conversation_history)
+
+    # 6. コンテキスト付きで応答を生成
     response_text = self._response_generator.generate(
-        user_message=message.text,
-        system_prompt=self._persona.system_prompt,
-        conversation_history=conversation_history,
+        user_message=message,
+        context=context,
     )
 
-    # 6. 応答を送信
+    # 7. 応答を送信
     self._messaging_service.send_message(
         channel_id=message.channel.id,
         text=response_text,
         thread_ts=message.thread_ts,
     )
 
-    # 7. 応答メッセージを保存
+    # 8. 応答メッセージを保存
     bot_message = self._create_bot_message(response_text, message)
     self._message_repository.save(bot_message)
 ```
@@ -160,6 +174,16 @@ def _get_conversation_history(self, message: Message) -> list[Message]:
             channel_id=message.channel.id,
             limit=20,
         )
+```
+
+### _build_context メソッド
+
+```python
+def _build_context(self, conversation_history: list[Message]) -> Context:
+    return Context(
+        persona=self._persona,
+        conversation_history=conversation_history,
+    )
 ```
 
 ### _create_bot_message メソッド
@@ -253,12 +277,19 @@ def main() -> None:
 | スレッド内 | thread_ts あり | fetch_thread_history が呼ばれる |
 | チャンネル直下 | thread_ts なし | fetch_channel_history が呼ばれる |
 
+#### Context 構築
+
+| テスト | シナリオ | 期待結果 |
+|--------|---------|---------|
+| Context 生成 | 履歴3件 | Context が正しく構築される |
+| Context のペルソナ | persona 設定 | persona が正しく設定される |
+
 #### コンテキスト付き生成
 
 | テスト | シナリオ | 期待結果 |
 |--------|---------|---------|
-| 履歴渡し | 履歴3件 | generate に履歴が渡される |
-| 履歴空 | 履歴なし | generate に空リストが渡される |
+| generate 呼び出し | Context 付き | generate(message, context) が呼ばれる |
+| 履歴空 | 履歴なし | 空の conversation_history で動作 |
 
 #### 既存テストの維持
 
@@ -327,7 +358,10 @@ User                Slack           UseCase         Repository      HistoryServi
  |                   |                |-- fetch_*() ------------------>|              |
  |                   |                |<-- history --------------------|              |
  |                   |                |                |                |              |
- |                   |                |-- generate(history) ----------------------->|
+ |                   |                |-- build_context()              |              |
+ |                   |                |<-- Context                     |              |
+ |                   |                |                |                |              |
+ |                   |                |-- generate(message, context) ------------>|
  |                   |                |<-- response --------------------------------|
  |                   |                |                |                |              |
  |                   |<-- send() -----|                |                |              |
@@ -364,17 +398,24 @@ User                Slack           UseCase         Repository      HistoryServi
 - 新しい依存（repository, history_service）はモックで注入
 - 既存のテストシナリオは変更なしで通過すべき
 
+### Context の活用
+
+- Context はユースケース内で構築
+- ResponseGenerator は Context を受け取るだけ
+- 将来の拡張（長期・短期記憶）に対応しやすい設計
+
 ---
 
 ## 完了基準
 
 - [ ] ReplyToMentionUseCase が MessageRepository を使用している
 - [ ] ReplyToMentionUseCase が ConversationHistoryService を使用している
+- [ ] Context が正しく構築される
 - [ ] 受信メッセージがリポジトリに保存される
 - [ ] 応答メッセージがリポジトリに保存される
 - [ ] スレッド内ではスレッド履歴が使用される
 - [ ] チャンネル直下ではチャンネル履歴が使用される
-- [ ] 履歴付きで応答が生成される
+- [ ] Context 付きで応答が生成される
 - [ ] エントリポイントで依存性が正しく注入されている
 - [ ] 既存のテストが引き続き通過する
 - [ ] 新規テストケースが通過する
