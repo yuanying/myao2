@@ -50,9 +50,10 @@ class ReplyToMentionUseCase:
         if not message.mentions_user(self._bot_user_id):
             return
 
-        response_text = self._response_generator.generate(
-            user_message=message.text,
-            system_prompt=self._persona.system_prompt,
+        # TODO: Update to use Context in Task 05
+        response_text = self._response_generator.generate(  # type: ignore
+            user_message=message.text,  # type: ignore
+            system_prompt=self._persona.system_prompt,  # type: ignore
         )
 
         self._messaging_service.send_message(
