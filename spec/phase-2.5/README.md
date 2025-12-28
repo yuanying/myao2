@@ -351,10 +351,10 @@ myao2: [非同期で生成された応答]
 
 ## 完了基準
 
-- [ ] エントリポイントが `async def main()` + `asyncio.run()` で動作
-- [ ] Slack Socket Mode が非同期モードで接続
-- [ ] メンション時に非同期で応答生成・送信
-- [ ] `uv run pytest` が全テスト通過
-- [ ] `uv run ty check` が通過
-- [ ] `uv run ruff check .` が通過
+- [x] エントリポイントが `async def main()` + `asyncio.run()` で動作
+- [x] Slack Socket Mode が非同期モードで接続
+- [x] メンション時に非同期で応答生成・送信
+- [x] `uv run pytest` が全テスト通過
+- [x] `uv run ty check` が通過
+- [x] `uv run ruff check .` が通過
 - [ ] 実機でメンション応答動作確認

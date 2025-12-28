@@ -2,9 +2,10 @@
 
 import json
 from collections.abc import Callable
-from contextlib import AbstractContextManager
+from contextlib import AbstractAsyncContextManager
 
-from sqlmodel import Session, select
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from myao2.domain.entities import Channel, Message, User
 from myao2.infrastructure.persistence.models import MessageModel
@@ -14,19 +15,21 @@ class SQLiteMessageRepository:
     """SQLite 版 MessageRepository 実装
 
     メッセージの CRUD 操作を SQLite データベースに対して行う。
+    非同期セッションを使用した非同期操作をサポート。
     """
 
     def __init__(
-        self, session_factory: Callable[[], AbstractContextManager[Session]]
+        self,
+        session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
     ) -> None:
         """初期化
 
         Args:
-            session_factory: セッション生成関数（コンテキストマネージャを返す）
+            session_factory: 非同期セッション生成関数
         """
         self._session_factory = session_factory
 
-    def save(self, message: Message) -> None:
+    async def save(self, message: Message) -> None:
         """メッセージを保存する（upsert）
 
         既存のメッセージが存在する場合は更新する。
@@ -34,13 +37,14 @@ class SQLiteMessageRepository:
         Args:
             message: 保存するメッセージ
         """
-        with self._session_factory() as session:
-            existing = session.exec(
+        async with self._session_factory() as session:
+            result = await session.exec(
                 select(MessageModel).where(
                     MessageModel.message_id == message.id,
                     MessageModel.channel_id == message.channel.id,
                 )
-            ).first()
+            )
+            existing = result.first()
 
             if existing:
                 # 更新
@@ -53,9 +57,9 @@ class SQLiteMessageRepository:
                 model = self._to_model(message)
                 session.add(model)
 
-            session.commit()
+            await session.commit()
 
-    def find_by_channel(
+    async def find_by_channel(
         self,
         channel_id: str,
         limit: int = 20,
@@ -72,7 +76,7 @@ class SQLiteMessageRepository:
         Returns:
             メッセージリスト（新しい順）
         """
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             statement = (
                 select(MessageModel)
                 .where(
@@ -82,10 +86,11 @@ class SQLiteMessageRepository:
                 .order_by(MessageModel.timestamp.desc())  # type: ignore[union-attr]
                 .limit(limit)
             )
-            models = session.exec(statement).all()
+            result = await session.exec(statement)
+            models = result.all()
             return [self._to_entity(m) for m in models]
 
-    def find_by_thread(
+    async def find_by_thread(
         self,
         channel_id: str,
         thread_ts: str,
@@ -104,7 +109,7 @@ class SQLiteMessageRepository:
         Returns:
             メッセージリスト（新しい順）
         """
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             statement = (
                 select(MessageModel)
                 .where(
@@ -114,10 +119,11 @@ class SQLiteMessageRepository:
                 .order_by(MessageModel.timestamp.desc())  # type: ignore[union-attr]
                 .limit(limit)
             )
-            models = session.exec(statement).all()
+            result = await session.exec(statement)
+            models = result.all()
             return [self._to_entity(m) for m in models]
 
-    def find_by_id(self, message_id: str, channel_id: str) -> Message | None:
+    async def find_by_id(self, message_id: str, channel_id: str) -> Message | None:
         """ID でメッセージを検索する
 
         Args:
@@ -127,12 +133,13 @@ class SQLiteMessageRepository:
         Returns:
             メッセージ（存在しない場合は None）
         """
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             statement = select(MessageModel).where(
                 MessageModel.message_id == message_id,
                 MessageModel.channel_id == channel_id,
             )
-            model = session.exec(statement).first()
+            result = await session.exec(statement)
+            model = result.first()
             if model is None:
                 return None
             return self._to_entity(model)

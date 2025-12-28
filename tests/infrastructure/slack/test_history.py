@@ -1,7 +1,7 @@
 """Tests for SlackConversationHistoryService."""
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from slack_sdk.errors import SlackApiError
@@ -36,15 +36,19 @@ class TestSlackConversationHistoryService:
 
     @pytest.fixture
     def mock_client(self) -> MagicMock:
-        """Create mock Slack WebClient."""
+        """Create mock Slack AsyncWebClient."""
         client = MagicMock()
-        client.users_info.return_value = {
-            "user": {
-                "id": "U123456",
-                "name": "testuser",
-                "is_bot": False,
+        client.users_info = AsyncMock(
+            return_value={
+                "user": {
+                    "id": "U123456",
+                    "name": "testuser",
+                    "is_bot": False,
+                }
             }
-        }
+        )
+        client.conversations_replies = AsyncMock()
+        client.conversations_history = AsyncMock()
         return client
 
     @pytest.fixture
@@ -56,7 +60,7 @@ class TestSlackConversationHistoryService:
 class TestFetchThreadHistory(TestSlackConversationHistoryService):
     """Tests for fetch_thread_history."""
 
-    def test_fetch_thread_history_basic(
+    async def test_fetch_thread_history_basic(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test basic thread history retrieval."""
@@ -69,7 +73,7 @@ class TestFetchThreadHistory(TestSlackConversationHistoryService):
             ],
         }
 
-        messages = service.fetch_thread_history(
+        messages = await service.fetch_thread_history(
             channel_id="C123456",
             thread_ts="1234567890.000001",
         )
@@ -81,13 +85,13 @@ class TestFetchThreadHistory(TestSlackConversationHistoryService):
         assert messages[1].text == "Second"
         assert messages[2].text == "Third"
 
-        mock_client.conversations_replies.assert_called_once_with(
+        mock_client.conversations_replies.assert_awaited_once_with(
             channel="C123456",
             ts="1234567890.000001",
             limit=20,
         )
 
-    def test_fetch_thread_history_empty(
+    async def test_fetch_thread_history_empty(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test empty thread history."""
@@ -96,14 +100,14 @@ class TestFetchThreadHistory(TestSlackConversationHistoryService):
             "messages": [],
         }
 
-        messages = service.fetch_thread_history(
+        messages = await service.fetch_thread_history(
             channel_id="C123456",
             thread_ts="1234567890.000001",
         )
 
         assert messages == []
 
-    def test_fetch_thread_history_with_limit(
+    async def test_fetch_thread_history_with_limit(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test thread history with custom limit."""
@@ -115,19 +119,19 @@ class TestFetchThreadHistory(TestSlackConversationHistoryService):
             ],
         }
 
-        service.fetch_thread_history(
+        await service.fetch_thread_history(
             channel_id="C123456",
             thread_ts="1234567890.000001",
             limit=5,
         )
 
-        mock_client.conversations_replies.assert_called_once_with(
+        mock_client.conversations_replies.assert_awaited_once_with(
             channel="C123456",
             ts="1234567890.000001",
             limit=5,
         )
 
-    def test_fetch_thread_history_excludes_subtypes(
+    async def test_fetch_thread_history_excludes_subtypes(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test that subtypes are excluded."""
@@ -154,7 +158,7 @@ class TestFetchThreadHistory(TestSlackConversationHistoryService):
             ],
         }
 
-        messages = service.fetch_thread_history(
+        messages = await service.fetch_thread_history(
             channel_id="C123456",
             thread_ts="1234567890.000001",
         )
@@ -163,7 +167,7 @@ class TestFetchThreadHistory(TestSlackConversationHistoryService):
         assert messages[0].text == "Normal"
         assert messages[1].text == "Normal2"
 
-    def test_fetch_thread_history_api_error(
+    async def test_fetch_thread_history_api_error(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test that API errors are propagated."""
@@ -173,7 +177,7 @@ class TestFetchThreadHistory(TestSlackConversationHistoryService):
         )
 
         with pytest.raises(SlackApiError):
-            service.fetch_thread_history(
+            await service.fetch_thread_history(
                 channel_id="C123456",
                 thread_ts="1234567890.000001",
             )
@@ -182,7 +186,7 @@ class TestFetchThreadHistory(TestSlackConversationHistoryService):
 class TestFetchChannelHistory(TestSlackConversationHistoryService):
     """Tests for fetch_channel_history."""
 
-    def test_fetch_channel_history_basic(
+    async def test_fetch_channel_history_basic(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test basic channel history retrieval."""
@@ -196,7 +200,7 @@ class TestFetchChannelHistory(TestSlackConversationHistoryService):
             ],
         }
 
-        messages = service.fetch_channel_history(channel_id="C123456")
+        messages = await service.fetch_channel_history(channel_id="C123456")
 
         assert len(messages) == 3
         assert all(isinstance(m, Message) for m in messages)
@@ -205,12 +209,12 @@ class TestFetchChannelHistory(TestSlackConversationHistoryService):
         assert messages[1].text == "Second"
         assert messages[2].text == "Third"
 
-        mock_client.conversations_history.assert_called_once_with(
+        mock_client.conversations_history.assert_awaited_once_with(
             channel="C123456",
             limit=20,
         )
 
-    def test_fetch_channel_history_empty(
+    async def test_fetch_channel_history_empty(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test empty channel history."""
@@ -219,11 +223,11 @@ class TestFetchChannelHistory(TestSlackConversationHistoryService):
             "messages": [],
         }
 
-        messages = service.fetch_channel_history(channel_id="C123456")
+        messages = await service.fetch_channel_history(channel_id="C123456")
 
         assert messages == []
 
-    def test_fetch_channel_history_with_limit(
+    async def test_fetch_channel_history_with_limit(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test channel history with custom limit."""
@@ -234,14 +238,14 @@ class TestFetchChannelHistory(TestSlackConversationHistoryService):
             ],
         }
 
-        service.fetch_channel_history(channel_id="C123456", limit=10)
+        await service.fetch_channel_history(channel_id="C123456", limit=10)
 
-        mock_client.conversations_history.assert_called_once_with(
+        mock_client.conversations_history.assert_awaited_once_with(
             channel="C123456",
             limit=10,
         )
 
-    def test_fetch_channel_history_excludes_subtypes(
+    async def test_fetch_channel_history_excludes_subtypes(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test that subtypes are excluded."""
@@ -268,14 +272,14 @@ class TestFetchChannelHistory(TestSlackConversationHistoryService):
             ],
         }
 
-        messages = service.fetch_channel_history(channel_id="C123456")
+        messages = await service.fetch_channel_history(channel_id="C123456")
 
         assert len(messages) == 2
         # Reversed to chronological order
         assert messages[0].text == "Normal"
         assert messages[1].text == "Normal2"
 
-    def test_fetch_channel_history_api_error(
+    async def test_fetch_channel_history_api_error(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test that API errors are propagated."""
@@ -285,13 +289,13 @@ class TestFetchChannelHistory(TestSlackConversationHistoryService):
         )
 
         with pytest.raises(SlackApiError):
-            service.fetch_channel_history(channel_id="C123456")
+            await service.fetch_channel_history(channel_id="C123456")
 
 
 class TestToMessage(TestSlackConversationHistoryService):
     """Tests for _to_message."""
 
-    def test_to_message_basic(
+    async def test_to_message_basic(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test basic message conversion."""
@@ -301,7 +305,7 @@ class TestToMessage(TestSlackConversationHistoryService):
             text="Hello world",
         )
 
-        message = service._to_message(msg, channel_id="C123456")
+        message = await service._to_message(msg, channel_id="C123456")
 
         assert isinstance(message, Message)
         assert message.id == "1234567890.123456"
@@ -318,7 +322,7 @@ class TestToMessage(TestSlackConversationHistoryService):
         assert isinstance(message.timestamp, datetime)
         assert message.timestamp.tzinfo == timezone.utc
 
-    def test_to_message_with_thread_ts(
+    async def test_to_message_with_thread_ts(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test message conversion with thread_ts."""
@@ -329,12 +333,12 @@ class TestToMessage(TestSlackConversationHistoryService):
             thread_ts="1234567890.000001",
         )
 
-        message = service._to_message(msg, channel_id="C123456")
+        message = await service._to_message(msg, channel_id="C123456")
 
         assert message.thread_ts == "1234567890.000001"
         assert message.is_in_thread() is True
 
-    def test_to_message_with_mentions(
+    async def test_to_message_with_mentions(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test message conversion with mentions."""
@@ -344,11 +348,11 @@ class TestToMessage(TestSlackConversationHistoryService):
             text="Hello <@UBOT123>!",
         )
 
-        message = service._to_message(msg, channel_id="C123456")
+        message = await service._to_message(msg, channel_id="C123456")
 
         assert message.mentions == ["UBOT123"]
 
-    def test_to_message_with_multiple_mentions(
+    async def test_to_message_with_multiple_mentions(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test message conversion with multiple mentions."""
@@ -358,11 +362,11 @@ class TestToMessage(TestSlackConversationHistoryService):
             text="<@U111> and <@U222|username> are here",
         )
 
-        message = service._to_message(msg, channel_id="C123456")
+        message = await service._to_message(msg, channel_id="C123456")
 
         assert message.mentions == ["U111", "U222"]
 
-    def test_to_message_with_no_user(
+    async def test_to_message_with_no_user(
         self, service: SlackConversationHistoryService, mock_client: MagicMock
     ) -> None:
         """Test message conversion when user is not provided."""
@@ -372,11 +376,11 @@ class TestToMessage(TestSlackConversationHistoryService):
             "text": "System message",
         }
 
-        message = service._to_message(msg, channel_id="C123456")
+        message = await service._to_message(msg, channel_id="C123456")
 
         assert message.user.id == ""
         assert message.user.name == "Unknown"
         assert message.user.is_bot is True
 
         # Should not call users_info when no user
-        mock_client.users_info.assert_not_called()
+        mock_client.users_info.assert_not_awaited()

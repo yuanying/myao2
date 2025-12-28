@@ -9,10 +9,11 @@ dependencies = [
     "litellm>=1.0.0",
     "pyyaml>=6.0",
     "sqlmodel>=0.0.30",
+    "aiosqlite>=0.20.0",
 ]
 
 [project.scripts]
-myao2 = "myao2.__main__:main"
+myao2 = "myao2.__main__:run"
 
 [build-system]
 requires = ["hatchling"]

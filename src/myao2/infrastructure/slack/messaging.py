@@ -1,6 +1,6 @@
 """Slack messaging service."""
 
-from slack_sdk import WebClient
+from slack_sdk.web.async_client import AsyncWebClient
 
 
 class SlackMessagingService:
@@ -10,16 +10,16 @@ class SlackMessagingService:
     providing message sending capabilities.
     """
 
-    def __init__(self, client: WebClient) -> None:
+    def __init__(self, client: AsyncWebClient) -> None:
         """Initialize the service.
 
         Args:
-            client: Slack WebClient instance.
+            client: Slack AsyncWebClient instance.
         """
         self._client = client
         self._bot_user_id: str | None = None
 
-    def send_message(
+    async def send_message(
         self,
         channel_id: str,
         text: str,
@@ -35,13 +35,13 @@ class SlackMessagingService:
         Raises:
             SlackApiError: If the API call fails.
         """
-        self._client.chat_postMessage(
+        await self._client.chat_postMessage(
             channel=channel_id,
             text=text,
             thread_ts=thread_ts,
         )
 
-    def get_bot_user_id(self) -> str:
+    async def get_bot_user_id(self) -> str:
         """Get the bot's user ID.
 
         Returns:
@@ -51,6 +51,6 @@ class SlackMessagingService:
             The result is cached after the first call.
         """
         if self._bot_user_id is None:
-            response = self._client.auth_test()
+            response = await self._client.auth_test()
             self._bot_user_id = response["user_id"]
         return self._bot_user_id

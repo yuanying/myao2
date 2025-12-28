@@ -45,7 +45,7 @@ class ReplyToMentionUseCase:
         self._persona = persona
         self._bot_user_id = bot_user_id
 
-    def execute(self, message: Message) -> None:
+    async def execute(self, message: Message) -> None:
         """Execute the use case.
 
         Processing flow:
@@ -70,22 +70,22 @@ class ReplyToMentionUseCase:
             return
 
         # 3. Save the received message
-        self._message_repository.save(message)
+        await self._message_repository.save(message)
 
         # 4. Fetch conversation history
-        conversation_history = self._get_conversation_history(message)
+        conversation_history = await self._get_conversation_history(message)
 
         # 5. Build Context
         context = self._build_context(conversation_history)
 
         # 6. Generate response with context
-        response_text = self._response_generator.generate(
+        response_text = await self._response_generator.generate(
             user_message=message,
             context=context,
         )
 
         # 7. Send response
-        self._messaging_service.send_message(
+        await self._messaging_service.send_message(
             channel_id=message.channel.id,
             text=response_text,
             thread_ts=message.thread_ts,
@@ -93,9 +93,9 @@ class ReplyToMentionUseCase:
 
         # 8. Save response message
         bot_message = self._create_bot_message(response_text, message)
-        self._message_repository.save(bot_message)
+        await self._message_repository.save(bot_message)
 
-    def _get_conversation_history(self, message: Message) -> list[Message]:
+    async def _get_conversation_history(self, message: Message) -> list[Message]:
         """Get conversation history.
 
         Fetches thread history for messages in a thread,
@@ -109,14 +109,14 @@ class ReplyToMentionUseCase:
         """
         if message.is_in_thread():
             # Fetch thread history for messages in a thread
-            return self._conversation_history_service.fetch_thread_history(
+            return await self._conversation_history_service.fetch_thread_history(
                 channel_id=message.channel.id,
                 thread_ts=message.thread_ts,  # type: ignore[arg-type]
                 limit=20,
             )
         else:
             # Fetch channel history for messages in the channel
-            return self._conversation_history_service.fetch_channel_history(
+            return await self._conversation_history_service.fetch_channel_history(
                 channel_id=message.channel.id,
                 limit=20,
             )

@@ -3,7 +3,7 @@
 import re
 from datetime import datetime, timezone
 
-from slack_sdk import WebClient
+from slack_sdk.web.async_client import AsyncWebClient
 
 from myao2.domain.entities import Channel, Message, User
 
@@ -17,15 +17,15 @@ class SlackEventAdapter:
 
     MENTION_PATTERN = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]*)?>")
 
-    def __init__(self, client: WebClient) -> None:
+    def __init__(self, client: AsyncWebClient) -> None:
         """Initialize the adapter.
 
         Args:
-            client: Slack WebClient for fetching user info.
+            client: Slack AsyncWebClient for fetching user info.
         """
         self._client = client
 
-    def to_message(self, event: dict) -> Message:
+    async def to_message(self, event: dict) -> Message:
         """Convert a Slack event to a Message entity.
 
         Args:
@@ -35,7 +35,7 @@ class SlackEventAdapter:
             Message entity.
         """
         user_id = event["user"]
-        user_info = self._client.users_info(user=user_id)
+        user_info = await self._client.users_info(user=user_id)
         user_data = user_info["user"]
 
         user = User(

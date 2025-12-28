@@ -12,7 +12,7 @@ class ConversationHistoryService(Protocol):
     from any messaging platform (Slack, Discord, etc.).
     """
 
-    def fetch_thread_history(
+    async def fetch_thread_history(
         self,
         channel_id: str,
         thread_ts: str,
@@ -30,7 +30,7 @@ class ConversationHistoryService(Protocol):
         """
         ...
 
-    def fetch_channel_history(
+    async def fetch_channel_history(
         self,
         channel_id: str,
         limit: int = 20,
@@ -54,7 +54,7 @@ class MessagingService(Protocol):
     to any messaging platform (Slack, Discord, etc.).
     """
 
-    def send_message(
+    async def send_message(
         self,
         channel_id: str,
         text: str,
@@ -77,7 +77,7 @@ class ResponseGenerator(Protocol):
     responses using LLM or other mechanisms.
     """
 
-    def generate(
+    async def generate(
         self,
         user_message: Message,
         context: Context,
