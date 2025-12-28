@@ -72,9 +72,6 @@ class PeriodicChecker:
     │
     ├─> ループ開始
     │   │
-    │   ├─> enabled チェック
-    │   │   └─> False なら終了
-    │   │
     │   ├─> AutonomousResponseUseCase.execute()
     │   │
     │   ├─> 例外発生時:
@@ -119,9 +116,6 @@ async def start(self) -> None:
     self._stop_event = asyncio.Event()
 
     while not self._stop_event.is_set():
-        if not self._config.enabled:
-            break
-
         try:
             await self._usecase.execute()
         except Exception as e:
@@ -151,7 +145,6 @@ async def stop(self) -> None:
 |--------|---------|---------|
 | 正常動作 | ループ実行 | ユースケースが呼ばれる |
 | 停止シグナル | stop() 呼び出し | ループ終了 |
-| enabled=False | 設定で無効 | 即座に終了 |
 | 例外発生 | ユースケースでエラー | ログ出力、継続 |
 
 ### stop
@@ -184,9 +177,8 @@ async def stop(self) -> None:
 
 ## 完了基準
 
-- [ ] PeriodicChecker が定義されている
-- [ ] 指定間隔でユースケースが実行される
-- [ ] stop() でグレースフルに終了する
-- [ ] enabled=False で起動しない
-- [ ] 例外発生時も継続する
-- [ ] 全テストケースが通過する
+- [x] PeriodicChecker が定義されている
+- [x] 指定間隔でユースケースが実行される
+- [x] stop() でグレースフルに終了する
+- [x] 例外発生時も継続する
+- [x] 全テストケースが通過する
