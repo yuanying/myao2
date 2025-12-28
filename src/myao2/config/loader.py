@@ -13,6 +13,7 @@ from myao2.config.models import (
     LoggingConfig,
     MemoryConfig,
     PersonaConfig,
+    ResponseConfig,
     SlackConfig,
 )
 
@@ -164,6 +165,13 @@ def load_config(path: str | Path) -> Config:
         ),
     )
 
+    # ResponseConfig (optional, defaults used if not present)
+    response_data = data.get("response", {})
+    response = ResponseConfig(
+        check_interval_seconds=response_data.get("check_interval_seconds", 60),
+        min_wait_seconds=response_data.get("min_wait_seconds", 300),
+    )
+
     # LoggingConfig (optional)
     logging_config: LoggingConfig | None = None
     logging_data = data.get("logging")
@@ -178,5 +186,10 @@ def load_config(path: str | Path) -> Config:
         )
 
     return Config(
-        slack=slack, llm=llm, persona=persona, memory=memory, logging=logging_config
+        slack=slack,
+        llm=llm,
+        persona=persona,
+        memory=memory,
+        response=response,
+        logging=logging_config,
     )

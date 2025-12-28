@@ -94,8 +94,8 @@ class Config:
 
 ## 完了基準
 
-- [ ] ResponseConfig が定義されている
-- [ ] Config に response フィールドが追加されている
-- [ ] loader.py で response セクションが読み込まれる
-- [ ] response セクションがない場合はデフォルト値が使用される
-- [ ] 全テストケースが通過する
+- [x] ResponseConfig が定義されている
+- [x] Config に response フィールドが追加されている
+- [x] loader.py で response セクションが読み込まれる
+- [x] response セクションがない場合はデフォルト値が使用される
+- [x] 全テストケースが通過する
