@@ -183,6 +183,18 @@ external:
 
 **成果物:** 会話の流れを理解して応答できるボット
 
+### Phase 2.5: 非同期化
+
+**目標:** Phase 3「自律的応答」の実現に向けて、アプリケーション全体を asyncio ベースに移行
+
+- asyncio 統合（async def main() + asyncio.run()）
+- Slack Bolt 非同期モード（AsyncApp, AsyncSocketModeHandler）
+- Protocol の非同期化（async def generate(), async def send_message()）
+- LLM クライアント非同期化（litellm.acompletion()）
+- リポジトリ非同期化（run_in_executor ラッパー）
+
+**成果物:** 非同期で動作するメンション応答ボット（Phase 3 の並行処理基盤）
+
 ### Phase 3: 自律的応答
 
 **目標:** 人間のように適切なタイミングで自律的に応答
