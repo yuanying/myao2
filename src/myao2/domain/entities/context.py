@@ -10,30 +10,37 @@ from myao2.domain.entities.message import Message
 class Context:
     """Conversation context.
 
-    Holds conversation history and generates system prompts for LLM.
-    Phase 3 will add long-term and short-term memory support.
+    Holds conversation history and auxiliary context,
+    and generates system prompts for LLM.
 
     Attributes:
         persona: Persona configuration with name and system prompt.
         conversation_history: List of past messages in chronological order.
+        auxiliary_context: Optional supplementary context from other channels.
     """
 
     persona: PersonaConfig
     conversation_history: list[Message] = field(default_factory=list)
-    # Phase 3 以降で追加予定
+    auxiliary_context: str | None = None
+    # Phase 4 以降で追加予定
     # long_term_memory: str | None = None
     # short_term_memory: str | None = None
 
     def build_system_prompt(self) -> str:
         """Build the system prompt.
 
-        Phase 2: Simply returns the persona's system prompt.
-        Phase 3+: Will integrate long-term and short-term memory.
+        Constructs the system prompt by combining persona's system prompt
+        with optional auxiliary context.
 
         Returns:
             System prompt string.
         """
-        return self.persona.system_prompt
+        parts = [self.persona.system_prompt]
+
+        if self.auxiliary_context:
+            parts.append(f"\n\n## 参考情報\n{self.auxiliary_context}")
+
+        return "".join(parts)
 
     def build_messages_for_llm(
         self,

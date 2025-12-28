@@ -393,3 +393,58 @@ class TestContextImmutability:
 
         with pytest.raises(AttributeError):
             context.persona = persona_config  # type: ignore[misc]
+
+
+class TestAuxiliaryContext:
+    """Tests for auxiliary context functionality."""
+
+    def test_auxiliary_context_default_none(
+        self,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that auxiliary_context defaults to None."""
+        context = Context(persona=persona_config, conversation_history=[])
+        assert context.auxiliary_context is None
+
+    def test_auxiliary_context_set(
+        self,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that auxiliary_context can be set."""
+        aux = "## 最近のチャンネルでの会話\n#general:\n- user1: テスト"
+        context = Context(
+            persona=persona_config,
+            conversation_history=[],
+            auxiliary_context=aux,
+        )
+        assert context.auxiliary_context == aux
+
+
+class TestBuildSystemPromptWithAuxiliaryContext:
+    """Tests for build_system_prompt with auxiliary context."""
+
+    def test_without_auxiliary_context(
+        self,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that persona prompt only is returned when no auxiliary context."""
+        context = Context(persona=persona_config, conversation_history=[])
+        result = context.build_system_prompt()
+        assert result == persona_config.system_prompt
+        assert "参考情報" not in result
+
+    def test_with_auxiliary_context(
+        self,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that auxiliary context is appended to system prompt."""
+        aux = "#general:\n- user1: こんにちは"
+        context = Context(
+            persona=persona_config,
+            conversation_history=[],
+            auxiliary_context=aux,
+        )
+        result = context.build_system_prompt()
+        assert persona_config.system_prompt in result
+        assert "## 参考情報" in result
+        assert aux in result
