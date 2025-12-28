@@ -3,6 +3,9 @@
 from myao2.infrastructure.persistence.channel_repository import (
     SQLiteChannelRepository,
 )
+from myao2.infrastructure.persistence.conversation_history import (
+    DBConversationHistoryService,
+)
 from myao2.infrastructure.persistence.database import DatabaseManager
 from myao2.infrastructure.persistence.exceptions import (
     DatabaseError,
@@ -22,6 +25,7 @@ __all__ = [
     "ChannelModel",
     "DatabaseError",
     "DatabaseManager",
+    "DBConversationHistoryService",
     "MessageModel",
     "PersistenceError",
     "SQLiteChannelRepository",
