@@ -57,11 +57,13 @@ class ResponseJudgment(Protocol):
     async def judge(
         self,
         context: Context,
+        message: Message,
     ) -> JudgmentResult:
         """応答すべきかを判定する
 
         Args:
             context: 会話コンテキスト（persona と conversation_history を含む）
+            message: 判定対象のメッセージ
 
         Returns:
             判定結果
@@ -94,11 +96,14 @@ class ResponseJudgment(Protocol):
 あなたは会話への参加判断を行うアシスタントです。
 以下の会話を分析し、{persona.name}として応答すべきかを判断してください。
 
+現在時刻: {current_time}
+
 判断基準：
 1. 誰も反応していないメッセージがあるか
 2. 困っている/寂しそうな状況か
 3. 有用なアドバイスができそうか
 4. 会話に割り込むのが適切か
+5. メッセージからの経過時間（長時間放置されているか）
 
 以下の場合は応答しないでください：
 - 明らかな独り言
@@ -107,6 +112,21 @@ class ResponseJudgment(Protocol):
 回答形式：
 {"should_respond": true/false, "reason": "理由"}
 ```
+
+### 会話履歴のフォーマット
+
+各メッセージは以下の形式で時刻付きで送信される：
+
+```
+会話履歴:
+[2024-01-01 12:00:00] user_name: メッセージ内容
+[2024-01-01 12:05:00] another_user: 返信内容
+
+判定対象メッセージ:
+[2024-01-01 12:30:00] target_user: このメッセージに応答すべきか判定してください
+```
+
+これにより LLM が経過時間を判断材料として使用でき、判定対象のメッセージが明確になる。
 
 ### レスポンスのパース
 
@@ -150,6 +170,9 @@ llm:
 | 応答不要 | 活発な会話 | should_respond=False |
 | JSONパース成功 | 正しいJSON | 結果が返る |
 | JSONパース失敗 | 不正なJSON | should_respond=False |
+| LLMエラー | API エラー | should_respond=False |
+| 時刻情報 | プロンプトに現在時刻が含まれる | 時刻が含まれる |
+| メッセージ時刻 | 各メッセージに時刻が含まれる | 時刻が含まれる |
 
 ---
 
@@ -174,9 +197,9 @@ llm:
 
 ## 完了基準
 
-- [ ] JudgmentResult が定義されている
-- [ ] ResponseJudgment Protocol が定義されている
-- [ ] LLMResponseJudgment が実装されている
-- [ ] llm.judgment 設定が使用されている
-- [ ] 判定理由がログ出力される
-- [ ] 全テストケースが通過する
+- [x] JudgmentResult が定義されている
+- [x] ResponseJudgment Protocol が定義されている
+- [x] LLMResponseJudgment が実装されている
+- [x] llm.judgment 設定が使用されている
+- [x] 判定理由がログ出力される
+- [x] 全テストケースが通過する
