@@ -53,18 +53,20 @@ dependencies = [
 | 01 | SQLite永続化基盤 | [01-sqlite-persistence.md](./01-sqlite-persistence.md) | - |
 | 02 | メッセージリポジトリ実装 | [02-message-repository.md](./02-message-repository.md) | 01 |
 | 03 | Slack履歴取得 | [03-slack-history.md](./03-slack-history.md) | - |
-| 04 | コンテキスト付き応答生成 | [04-context-response.md](./04-context-response.md) | - |
-| 05 | ユースケース統合 | [05-usecase-integration.md](./05-usecase-integration.md) | 02, 03, 04 |
+| 03a | Context ドメインモデル | [03a-context-model.md](./03a-context-model.md) | - |
+| 04 | コンテキスト付き応答生成 | [04-context-response.md](./04-context-response.md) | 03a |
+| 05 | ユースケース統合 | [05-usecase-integration.md](./05-usecase-integration.md) | 02, 03, 03a, 04 |
 
 ---
 
 ## 実装順序
 
 ```
-[01] SQLite永続化基盤    [03] Slack履歴取得    [04] コンテキスト付き応答
+[01] SQLite永続化基盤    [03] Slack履歴取得    [03a] Context モデル
         ↓                     │                      │
-[02] メッセージ              │                      │
-    リポジトリ実装            │                      │
+[02] メッセージ              │                      ↓
+    リポジトリ実装            │              [04] コンテキスト付き
+        │                     │                  応答生成
         └──────────────┬──────┴──────────────────────┘
                        ↓
             [05] ユースケース統合
@@ -72,7 +74,8 @@ dependencies = [
                   動作確認
 ```
 
-タスク 01, 03, 04 は並行して実装可能。
+タスク 01, 03, 03a は並行して実装可能。
+タスク 04 は 03a に依存。
 
 ---
 
@@ -103,19 +106,30 @@ Slack API を使ってチャンネル/スレッドの履歴を取得する。
 - SlackConversationHistoryService 実装
 - conversations.history / conversations.replies の呼び出し
 
+### 03a: Context ドメインモデル
+
+会話コンテキストを表現するドメインモデルを定義する。
+
+- Context エンティティの定義
+- 会話履歴の保持
+- システムプロンプトの構築（build_system_prompt）
+- LLM 形式へのメッセージ変換（build_messages_for_llm）
+- Phase 3 以降の長期・短期記憶拡張に対応した設計
+
 ### 04: コンテキスト付き応答生成
 
-会話履歴を考慮した応答生成を実装する。
+Context を使用した応答生成を実装する。
 
-- ResponseGenerator Protocol の拡張（conversation_history 追加）
+- ResponseGenerator Protocol の変更（generate(user_message, context)）
 - LiteLLMResponseGenerator の修正
-- 後方互換性の維持
+- Context から LLM メッセージを構築
 
 ### 05: ユースケース統合
 
 全コンポーネントを統合し、コンテキスト管理機能を完成させる。
 
 - ReplyToMentionUseCase の修正
+- Context の構築
 - エントリポイント（__main__.py）の更新
 - 受信/応答メッセージの永続化
 
@@ -180,7 +194,8 @@ src/myao2/
 │   │   ├── __init__.py
 │   │   ├── message.py
 │   │   ├── user.py
-│   │   └── channel.py
+│   │   ├── channel.py
+│   │   └── context.py       # 新規
 │   ├── repositories/        # 新規
 │   │   ├── __init__.py
 │   │   └── message_repository.py
@@ -221,7 +236,8 @@ tests/
 │   └── test_loader.py
 ├── domain/
 │   ├── entities/
-│   │   └── test_message.py
+│   │   ├── test_message.py
+│   │   └── test_context.py  # 新規
 │   └── repositories/        # 新規
 │       └── test_message_repository.py
 ├── application/
@@ -248,12 +264,20 @@ tests/
 
 - Domain層の Repository Protocol は Slack に依存しない
 - ConversationHistoryService も抽象化
+- Context はドメインモデルとして Slack 非依存
 - 将来 Discord 等に対応する際も Domain/Application 層は変更不要
 
-### 後方互換性
+### 責務分離
 
-- ResponseGenerator の conversation_history はオプショナル
-- 履歴なしでも従来通り動作
+- Context: コンテキスト情報の保持とプロンプト生成
+- ResponseGenerator: LLM 呼び出しのみ
+- UseCase: Context の構築と全体フローの調整
+
+### 拡張性
+
+- Context は Phase 3 以降の長期・短期記憶追加を想定
+- build_system_prompt で記憶情報をプロンプトに統合予定
+- ResponseGenerator の変更なしで記憶機能を追加可能
 
 ### パフォーマンス
 
