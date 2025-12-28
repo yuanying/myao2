@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from myao2.domain.entities import Message
+from myao2.domain.entities import Context, Message
 
 
 class ConversationHistoryService(Protocol):
@@ -79,14 +79,14 @@ class ResponseGenerator(Protocol):
 
     def generate(
         self,
-        user_message: str,
-        system_prompt: str,
+        user_message: Message,
+        context: Context,
     ) -> str:
         """Generate a response.
 
         Args:
             user_message: User's message to respond to.
-            system_prompt: System prompt for the response generator.
+            context: Conversation context (history, persona info).
 
         Returns:
             Generated response text.
