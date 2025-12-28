@@ -1,5 +1,6 @@
 """LLM response generator."""
 
+from myao2.domain.entities import Context, Message
 from myao2.infrastructure.llm.client import LLMClient
 
 
@@ -7,7 +8,7 @@ class LiteLLMResponseGenerator:
     """LiteLLM-based ResponseGenerator implementation.
 
     This class implements the ResponseGenerator protocol using LiteLLM
-    to generate responses to user messages.
+    to generate responses with conversation context.
     """
 
     def __init__(self, client: LLMClient) -> None:
@@ -20,14 +21,16 @@ class LiteLLMResponseGenerator:
 
     def generate(
         self,
-        user_message: str,
-        system_prompt: str,
+        user_message: Message,
+        context: Context,
     ) -> str:
         """Generate a response.
 
+        Uses Context to build the message list for the LLM.
+
         Args:
             user_message: User's message to respond to.
-            system_prompt: System prompt (persona settings, etc.).
+            context: Conversation context (history, persona info).
 
         Returns:
             Generated response text.
@@ -35,9 +38,5 @@ class LiteLLMResponseGenerator:
         Raises:
             LLMError: If response generation fails.
         """
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ]
-
+        messages = context.build_messages_for_llm(user_message)
         return self._client.complete(messages)
