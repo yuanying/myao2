@@ -155,8 +155,9 @@ class ChannelMonitor(Protocol):
 
 ## 完了基準
 
-- [ ] ChannelMonitor Protocol が定義されている
-- [ ] SlackChannelMonitor が実装されている
-- [ ] ボットが参加しているチャンネルを取得できる
-- [ ] 未応答メッセージを正しく検出できる
-- [ ] 全テストケースが通過する
+- [x] ChannelMonitor Protocol が定義されている
+- [x] SlackChannelMonitor が実装されている
+- [x] ボットが参加しているチャンネルを取得できる
+- [x] 未応答メッセージを正しく検出できる
+- [x] 全テストケースが通過する
+- [x] ResponseConfig に message_limit が追加されている（追加要件）
