@@ -1,5 +1,6 @@
 """Message repository protocol."""
 
+from datetime import datetime
 from typing import Protocol
 
 from myao2.domain.entities import Message
@@ -33,6 +34,26 @@ class MessageRepository(Protocol):
 
         Args:
             channel_id: チャンネル ID
+            limit: 取得する最大件数
+
+        Returns:
+            メッセージリスト（新しい順）
+        """
+        ...
+
+    async def find_by_channel_since(
+        self,
+        channel_id: str,
+        since: datetime,
+        limit: int = 20,
+    ) -> list[Message]:
+        """指定時刻以降のチャンネルメッセージを取得する
+
+        スレッドに属さないメッセージのみを取得する。
+
+        Args:
+            channel_id: チャンネル ID
+            since: この時刻より後のメッセージを取得
             limit: 取得する最大件数
 
         Returns:

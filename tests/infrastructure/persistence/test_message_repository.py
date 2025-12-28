@@ -158,7 +158,7 @@ class TestFindByChannel:
         base_time = datetime.now(timezone.utc)
         messages = [
             create_test_message(
-                id=f"1.00{i}",
+                id=f"1.{i:03d}",
                 timestamp=base_time + timedelta(minutes=i),
             )
             for i in range(5)
@@ -176,7 +176,7 @@ class TestFindByChannel:
     async def test_find_with_limit(self, repository: SQLiteMessageRepository) -> None:
         """Test limit parameter."""
         for i in range(10):
-            await repository.save(create_test_message(id=f"1.00{i}"))
+            await repository.save(create_test_message(id=f"1.{i:03d}"))
 
         result = await repository.find_by_channel("C123456", limit=3)
 
@@ -236,7 +236,7 @@ class TestFindByThread:
         thread_ts = "1.000"
         messages = [
             create_test_message(
-                id=f"1.00{i}",
+                id=f"1.{i:03d}",
                 thread_ts=thread_ts,
                 timestamp=base_time + timedelta(minutes=i),
             )
@@ -258,7 +258,7 @@ class TestFindByThread:
         thread_ts = "1.000"
         for i in range(5):
             await repository.save(
-                create_test_message(id=f"1.00{i}", thread_ts=thread_ts)
+                create_test_message(id=f"1.{i:03d}", thread_ts=thread_ts)
             )
 
         result = await repository.find_by_thread("C123456", thread_ts, limit=2)
@@ -321,6 +321,109 @@ class TestFindById:
         found = await repository.find_by_id(message.id, "C999999")
 
         assert found is None
+
+
+class TestFindByChannelSince:
+    """find_by_channel_since method tests."""
+
+    async def test_find_messages_after_since(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test that only messages after since are returned."""
+        base_time = datetime.now(timezone.utc)
+        messages = [
+            create_test_message(
+                id=f"1.{i:03d}",
+                timestamp=base_time + timedelta(minutes=i),
+            )
+            for i in range(5)
+        ]
+        for msg in messages:
+            await repository.save(msg)
+
+        # Get messages after minute 2
+        since = base_time + timedelta(minutes=2)
+        result = await repository.find_by_channel_since("C123456", since)
+
+        # Should get messages 3 and 4 (after minute 2)
+        assert len(result) == 2
+        assert result[0].id == "1.004"  # Newest first
+        assert result[1].id == "1.003"
+
+    async def test_find_with_limit(self, repository: SQLiteMessageRepository) -> None:
+        """Test limit parameter with since."""
+        base_time = datetime.now(timezone.utc)
+        for i in range(10):
+            await repository.save(
+                create_test_message(
+                    id=f"1.{i:03d}",
+                    timestamp=base_time + timedelta(minutes=i),
+                )
+            )
+
+        since = base_time + timedelta(minutes=3)
+        result = await repository.find_by_channel_since("C123456", since, limit=3)
+
+        assert len(result) == 3
+
+    async def test_find_excludes_thread_messages(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test that thread messages are excluded."""
+        base_time = datetime.now(timezone.utc)
+        # Channel message after since
+        channel_msg = create_test_message(
+            id="1.001", timestamp=base_time + timedelta(minutes=5), thread_ts=None
+        )
+        # Thread message after since
+        thread_msg = create_test_message(
+            id="1.002", timestamp=base_time + timedelta(minutes=6), thread_ts="1.000"
+        )
+
+        await repository.save(channel_msg)
+        await repository.save(thread_msg)
+
+        since = base_time
+        result = await repository.find_by_channel_since("C123456", since)
+
+        assert len(result) == 1
+        assert result[0].id == "1.001"
+
+    async def test_find_empty_when_no_messages_after_since(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test empty result when no messages are after since."""
+        base_time = datetime.now(timezone.utc)
+        message = create_test_message(
+            id="1.001", timestamp=base_time - timedelta(minutes=10)
+        )
+        await repository.save(message)
+
+        since = base_time
+        result = await repository.find_by_channel_since("C123456", since)
+
+        assert result == []
+
+    async def test_find_excludes_other_channels(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test that messages from other channels are excluded."""
+        base_time = datetime.now(timezone.utc)
+        msg_c1 = create_test_message(
+            id="1.001", channel_id="C111111", timestamp=base_time + timedelta(minutes=5)
+        )
+        msg_c2 = create_test_message(
+            id="1.002", channel_id="C222222", timestamp=base_time + timedelta(minutes=5)
+        )
+
+        await repository.save(msg_c1)
+        await repository.save(msg_c2)
+
+        since = base_time
+        result = await repository.find_by_channel_since("C111111", since)
+
+        assert len(result) == 1
+        assert result[0].channel.id == "C111111"
 
 
 class TestConversion:

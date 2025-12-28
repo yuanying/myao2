@@ -3,6 +3,7 @@
 import json
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from datetime import datetime
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -82,6 +83,40 @@ class SQLiteMessageRepository:
                 .where(
                     MessageModel.channel_id == channel_id,
                     MessageModel.thread_ts.is_(None),  # type: ignore[union-attr]
+                )
+                .order_by(MessageModel.timestamp.desc())  # type: ignore[union-attr]
+                .limit(limit)
+            )
+            result = await session.exec(statement)
+            models = result.all()
+            return [self._to_entity(m) for m in models]
+
+    async def find_by_channel_since(
+        self,
+        channel_id: str,
+        since: datetime,
+        limit: int = 20,
+    ) -> list[Message]:
+        """指定時刻以降のチャンネルメッセージを取得する
+
+        スレッドに属さないメッセージ（thread_ts が None）のみを取得。
+        新しい順（timestamp DESC）で返す。
+
+        Args:
+            channel_id: チャンネル ID
+            since: この時刻より後のメッセージを取得
+            limit: 取得する最大件数
+
+        Returns:
+            メッセージリスト（新しい順）
+        """
+        async with self._session_factory() as session:
+            statement = (
+                select(MessageModel)
+                .where(
+                    MessageModel.channel_id == channel_id,
+                    MessageModel.thread_ts.is_(None),  # type: ignore[union-attr]
+                    MessageModel.timestamp > since,  # type: ignore[union-attr]
                 )
                 .order_by(MessageModel.timestamp.desc())  # type: ignore[union-attr]
                 .limit(limit)
