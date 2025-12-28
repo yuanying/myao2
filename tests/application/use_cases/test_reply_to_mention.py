@@ -1,7 +1,7 @@
 """Tests for ReplyToMentionUseCase."""
 
 from datetime import datetime, timezone
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -20,7 +20,7 @@ def bot_user_id() -> str:
 def mock_messaging_service() -> Mock:
     """Create mock messaging service."""
     service = Mock()
-    service.send_message = Mock()
+    service.send_message = AsyncMock()
     return service
 
 
@@ -28,7 +28,7 @@ def mock_messaging_service() -> Mock:
 def mock_response_generator() -> Mock:
     """Create mock response generator."""
     generator = Mock()
-    generator.generate = Mock(return_value="Nice to meet you!")
+    generator.generate = AsyncMock(return_value="Nice to meet you!")
     return generator
 
 
@@ -36,10 +36,10 @@ def mock_response_generator() -> Mock:
 def mock_message_repository() -> Mock:
     """Create mock message repository."""
     repo = Mock()
-    repo.save = Mock()
-    repo.find_by_channel = Mock(return_value=[])
-    repo.find_by_thread = Mock(return_value=[])
-    repo.find_by_id = Mock(return_value=None)
+    repo.save = AsyncMock()
+    repo.find_by_channel = AsyncMock(return_value=[])
+    repo.find_by_thread = AsyncMock(return_value=[])
+    repo.find_by_id = AsyncMock(return_value=None)
     return repo
 
 
@@ -47,8 +47,8 @@ def mock_message_repository() -> Mock:
 def mock_conversation_history_service() -> Mock:
     """Create mock conversation history service."""
     service = Mock()
-    service.fetch_thread_history = Mock(return_value=[])
-    service.fetch_channel_history = Mock(return_value=[])
+    service.fetch_thread_history = AsyncMock(return_value=[])
+    service.fetch_channel_history = AsyncMock(return_value=[])
     return service
 
 
@@ -102,7 +102,7 @@ def timestamp() -> datetime:
 class TestReplyToMentionUseCase:
     """ReplyToMentionUseCase tests."""
 
-    def test_mention_in_channel_sends_message(
+    async def test_mention_in_channel_sends_message(
         self,
         use_case: ReplyToMentionUseCase,
         mock_messaging_service: Mock,
@@ -121,15 +121,15 @@ class TestReplyToMentionUseCase:
             mentions=[bot_user_id],
         )
 
-        use_case.execute(message)
+        await use_case.execute(message)
 
-        mock_messaging_service.send_message.assert_called_once_with(
+        mock_messaging_service.send_message.assert_awaited_once_with(
             channel_id=channel.id,
             text="Nice to meet you!",
             thread_ts=None,
         )
 
-    def test_mention_in_thread_replies_to_thread(
+    async def test_mention_in_thread_replies_to_thread(
         self,
         use_case: ReplyToMentionUseCase,
         mock_messaging_service: Mock,
@@ -150,15 +150,15 @@ class TestReplyToMentionUseCase:
             mentions=[bot_user_id],
         )
 
-        use_case.execute(message)
+        await use_case.execute(message)
 
-        mock_messaging_service.send_message.assert_called_once_with(
+        mock_messaging_service.send_message.assert_awaited_once_with(
             channel_id=channel.id,
             text="Nice to meet you!",
             thread_ts=thread_ts,
         )
 
-    def test_no_mention_does_nothing(
+    async def test_no_mention_does_nothing(
         self,
         use_case: ReplyToMentionUseCase,
         mock_messaging_service: Mock,
@@ -177,12 +177,12 @@ class TestReplyToMentionUseCase:
             mentions=["U999"],  # Other user mentioned
         )
 
-        use_case.execute(message)
+        await use_case.execute(message)
 
-        mock_messaging_service.send_message.assert_not_called()
-        mock_message_repository.save.assert_not_called()
+        mock_messaging_service.send_message.assert_not_awaited()
+        mock_message_repository.save.assert_not_awaited()
 
-    def test_bot_message_ignored(
+    async def test_bot_message_ignored(
         self,
         use_case: ReplyToMentionUseCase,
         mock_messaging_service: Mock,
@@ -202,16 +202,16 @@ class TestReplyToMentionUseCase:
             mentions=[bot_user_id],
         )
 
-        use_case.execute(message)
+        await use_case.execute(message)
 
-        mock_messaging_service.send_message.assert_not_called()
-        mock_message_repository.save.assert_not_called()
+        mock_messaging_service.send_message.assert_not_awaited()
+        mock_message_repository.save.assert_not_awaited()
 
 
 class TestReplyToMentionUseCaseMessageSaving:
     """Tests for message saving functionality."""
 
-    def test_saves_received_message(
+    async def test_saves_received_message(
         self,
         use_case: ReplyToMentionUseCase,
         mock_message_repository: Mock,
@@ -230,15 +230,15 @@ class TestReplyToMentionUseCaseMessageSaving:
             mentions=[bot_user_id],
         )
 
-        use_case.execute(message)
+        await use_case.execute(message)
 
         # First save call should be for the received message
-        assert mock_message_repository.save.call_count >= 1
-        first_save_call = mock_message_repository.save.call_args_list[0]
+        assert mock_message_repository.save.await_count >= 1
+        first_save_call = mock_message_repository.save.await_args_list[0]
         saved_message = first_save_call[0][0]
         assert saved_message.id == message.id
 
-    def test_saves_bot_response_message(
+    async def test_saves_bot_response_message(
         self,
         use_case: ReplyToMentionUseCase,
         mock_message_repository: Mock,
@@ -258,11 +258,11 @@ class TestReplyToMentionUseCaseMessageSaving:
             mentions=[bot_user_id],
         )
 
-        use_case.execute(message)
+        await use_case.execute(message)
 
         # Second save call should be for the bot response
-        assert mock_message_repository.save.call_count == 2
-        second_save_call = mock_message_repository.save.call_args_list[1]
+        assert mock_message_repository.save.await_count == 2
+        second_save_call = mock_message_repository.save.await_args_list[1]
         saved_response = second_save_call[0][0]
         assert saved_response.text == "Nice to meet you!"
         assert saved_response.user.id == bot_user_id
@@ -272,7 +272,7 @@ class TestReplyToMentionUseCaseMessageSaving:
 class TestReplyToMentionUseCaseHistoryFetching:
     """Tests for conversation history fetching."""
 
-    def test_fetches_thread_history_when_in_thread(
+    async def test_fetches_thread_history_when_in_thread(
         self,
         use_case: ReplyToMentionUseCase,
         mock_conversation_history_service: Mock,
@@ -293,16 +293,16 @@ class TestReplyToMentionUseCaseHistoryFetching:
             mentions=[bot_user_id],
         )
 
-        use_case.execute(message)
+        await use_case.execute(message)
 
-        mock_conversation_history_service.fetch_thread_history.assert_called_once_with(
+        mock_conversation_history_service.fetch_thread_history.assert_awaited_once_with(
             channel_id=channel.id,
             thread_ts=thread_ts,
             limit=20,
         )
-        mock_conversation_history_service.fetch_channel_history.assert_not_called()
+        mock_conversation_history_service.fetch_channel_history.assert_not_awaited()
 
-    def test_fetches_channel_history_when_not_in_thread(
+    async def test_fetches_channel_history_when_not_in_thread(
         self,
         use_case: ReplyToMentionUseCase,
         mock_conversation_history_service: Mock,
@@ -321,19 +321,19 @@ class TestReplyToMentionUseCaseHistoryFetching:
             mentions=[bot_user_id],
         )
 
-        use_case.execute(message)
+        await use_case.execute(message)
 
-        mock_conversation_history_service.fetch_channel_history.assert_called_once_with(
+        mock_conversation_history_service.fetch_channel_history.assert_awaited_once_with(
             channel_id=channel.id,
             limit=20,
         )
-        mock_conversation_history_service.fetch_thread_history.assert_not_called()
+        mock_conversation_history_service.fetch_thread_history.assert_not_awaited()
 
 
 class TestReplyToMentionUseCaseContextBuilding:
     """Tests for Context building."""
 
-    def test_builds_context_with_history(
+    async def test_builds_context_with_history(
         self,
         use_case: ReplyToMentionUseCase,
         mock_response_generator: Mock,
@@ -367,10 +367,10 @@ class TestReplyToMentionUseCaseContextBuilding:
             mentions=[bot_user_id],
         )
 
-        use_case.execute(message)
+        await use_case.execute(message)
 
         # Verify generate was called with proper Context
-        mock_response_generator.generate.assert_called_once()
+        mock_response_generator.generate.assert_awaited_once()
         call_args = mock_response_generator.generate.call_args
         passed_message = call_args.kwargs["user_message"]
         passed_context = call_args.kwargs["context"]
@@ -380,7 +380,7 @@ class TestReplyToMentionUseCaseContextBuilding:
         assert passed_context.persona == persona
         assert passed_context.conversation_history == history
 
-    def test_builds_context_with_empty_history(
+    async def test_builds_context_with_empty_history(
         self,
         use_case: ReplyToMentionUseCase,
         mock_response_generator: Mock,
@@ -400,7 +400,7 @@ class TestReplyToMentionUseCaseContextBuilding:
             mentions=[bot_user_id],
         )
 
-        use_case.execute(message)
+        await use_case.execute(message)
 
         call_args = mock_response_generator.generate.call_args
         passed_context = call_args.kwargs["context"]
@@ -411,7 +411,7 @@ class TestReplyToMentionUseCaseContextBuilding:
 class TestReplyToMentionUseCaseContextGeneration:
     """Tests for context-based response generation."""
 
-    def test_generates_response_with_context(
+    async def test_generates_response_with_context(
         self,
         use_case: ReplyToMentionUseCase,
         mock_response_generator: Mock,
@@ -430,9 +430,9 @@ class TestReplyToMentionUseCaseContextGeneration:
             mentions=[bot_user_id],
         )
 
-        use_case.execute(message)
+        await use_case.execute(message)
 
-        mock_response_generator.generate.assert_called_once()
+        mock_response_generator.generate.assert_awaited_once()
         call_args = mock_response_generator.generate.call_args
 
         assert "user_message" in call_args.kwargs
