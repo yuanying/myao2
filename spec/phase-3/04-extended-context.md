@@ -148,8 +148,8 @@ def build_system_prompt(self) -> str:
 
 ## 完了基準
 
-- [ ] Context に auxiliary_context フィールドが追加されている
-- [ ] build_system_prompt で補助コンテキストが統合される
-- [ ] auxiliary_context=None の場合は既存動作と同じ
-- [ ] 既存のテストが引き続き通過する
-- [ ] 全テストケースが通過する
+- [x] Context に auxiliary_context フィールドが追加されている
+- [x] build_system_prompt で補助コンテキストが統合される
+- [x] auxiliary_context=None の場合は既存動作と同じ
+- [x] 既存のテストが引き続き通過する
+- [x] 全テストケースが通過する
