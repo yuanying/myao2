@@ -196,7 +196,7 @@ def sample_context(persona_config) -> Context:
 
 ## 完了基準
 
-- [ ] ResponseGenerator Protocol が新しいインターフェースに変更されている
-- [ ] LiteLLMResponseGenerator が Context を受け取る
-- [ ] Context.build_messages_for_llm が正しく使用される
-- [ ] 全テストケースが通過する
+- [x] ResponseGenerator Protocol が新しいインターフェースに変更されている
+- [x] LiteLLMResponseGenerator が Context を受け取る
+- [x] Context.build_messages_for_llm が正しく使用される
+- [x] 全テストケースが通過する
