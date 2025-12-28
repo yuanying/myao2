@@ -8,10 +8,15 @@ from pathlib import Path
 from myao2.application.use_cases import ReplyToMentionUseCase
 from myao2.config import ConfigError, LoggingConfig, load_config
 from myao2.infrastructure.llm import LiteLLMResponseGenerator, LLMClient
-from myao2.infrastructure.persistence import DatabaseManager, SQLiteMessageRepository
+from myao2.infrastructure.persistence import (
+    DatabaseManager,
+    DBConversationHistoryService,
+    SQLiteChannelRepository,
+    SQLiteMessageRepository,
+    SQLiteUserRepository,
+)
 from myao2.infrastructure.slack import (
     SlackAppRunner,
-    SlackConversationHistoryService,
     SlackEventAdapter,
     SlackMessagingService,
     create_slack_app,
@@ -87,9 +92,16 @@ async def main() -> None:
     await db_manager.create_tables()
 
     # Build dependencies
-    event_adapter = SlackEventAdapter(app.client)
-    conversation_history_service = SlackConversationHistoryService(app.client)
     message_repository = SQLiteMessageRepository(db_manager.get_session)
+    user_repository = SQLiteUserRepository(db_manager.get_session)
+    channel_repository = SQLiteChannelRepository(db_manager.get_session)
+
+    event_adapter = SlackEventAdapter(
+        client=app.client,
+        user_repository=user_repository,
+        channel_repository=channel_repository,
+    )
+    conversation_history_service = DBConversationHistoryService(message_repository)
 
     # Use default LLM config
     if "default" not in config.llm:
