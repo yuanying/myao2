@@ -350,11 +350,11 @@ class SQLiteMemoryRepository(MemoryRepository):
 
 ## 完了基準
 
-- [ ] MemoryRepository Protocol が定義されている
-- [ ] MemoryModel が定義されている
-- [ ] SQLiteMemoryRepository が実装されている
-- [ ] save で upsert が行われる
-- [ ] 検索メソッドが正しく動作する
-- [ ] 削除メソッドが正しく動作する
-- [ ] `__init__.py` でエクスポートされている
-- [ ] 全テストケースが通過する
+- [x] MemoryRepository Protocol が定義されている
+- [x] MemoryModel が定義されている
+- [x] SQLiteMemoryRepository が実装されている
+- [x] save で upsert が行われる
+- [x] 検索メソッドが正しく動作する
+- [x] 削除メソッドが正しく動作する
+- [x] `__init__.py` でエクスポートされている
+- [x] 全テストケースが通過する
