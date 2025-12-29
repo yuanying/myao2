@@ -26,6 +26,7 @@ response:
   check_interval_seconds: 60  # 判定ループの間隔
   min_wait_seconds: 300  # 最低待機時間（誰も反応しない場合）
   message_limit: 20  # チャンネル監視時の取得メッセージ数上限
+  max_message_age_seconds: 43200  # 最大メッセージ経過時間（12時間）、これより古いメッセージは対象外
 
 # 記憶設定
 memory:

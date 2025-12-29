@@ -53,6 +53,7 @@ class ResponseConfig:
     check_interval_seconds: int = 60
     min_wait_seconds: int = 300
     message_limit: int = 20
+    max_message_age_seconds: int = 43200  # 12 hours
 
 
 @dataclass

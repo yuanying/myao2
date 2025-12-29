@@ -81,6 +81,7 @@ class AutonomousResponseUseCase:
         unreplied_messages = await self._channel_monitor.get_unreplied_messages(
             channel_id=channel.id,
             min_wait_seconds=self._config.response.min_wait_seconds,
+            max_message_age_seconds=self._config.response.max_message_age_seconds,
         )
 
         for message in unreplied_messages:

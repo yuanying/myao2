@@ -1,9 +1,12 @@
 """DB implementation of ChannelMonitor."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from myao2.domain.entities import Channel, Message
 from myao2.domain.repositories import ChannelRepository, MessageRepository
+
+# Limit for fetching all messages
+_MESSAGE_LIMIT = 200
 
 
 class DBChannelMonitor:
@@ -65,50 +68,71 @@ class DBChannelMonitor:
         self,
         channel_id: str,
         min_wait_seconds: int,
+        max_message_age_seconds: int | None = None,
     ) -> list[Message]:
         """未応答メッセージを DB から取得する
 
         指定時間以上経過し、かつボットが応答していないメッセージを取得する。
+        スレッド内のメッセージも含む。
 
         Args:
             channel_id: チャンネル ID
             min_wait_seconds: 最低待機時間（秒）
+            max_message_age_seconds: 最大メッセージ経過時間（秒）。
+                この時間より古いメッセージは除外する。None の場合は制限なし。
 
         Returns:
             未応答メッセージリスト
         """
         now = datetime.now(timezone.utc)
-        cutoff_timestamp = now.timestamp() - min_wait_seconds
+        cutoff_ts = (now - timedelta(seconds=min_wait_seconds)).timestamp()
 
-        # チャンネルの最近のメッセージを取得
-        messages = await self._message_repository.find_by_channel(channel_id, limit=50)
+        # 最大経過時間を計算
+        min_timestamp = None
+        if max_message_age_seconds is not None:
+            min_timestamp = now - timedelta(seconds=max_message_age_seconds)
 
-        # ボットのメッセージ時刻を収集
-        bot_message_times: list[float] = []
-        for msg in messages:
-            if msg.user.id == self._bot_user_id:
-                bot_message_times.append(msg.timestamp.timestamp())
+        # ボットを含む全メッセージを一度に取得
+        all_messages = await self._message_repository.find_all_in_channel(
+            channel_id=channel_id,
+            limit=_MESSAGE_LIMIT,
+            min_timestamp=min_timestamp,
+        )
+
+        # スレッドごとにメッセージをグループ化
+        # key: thread_ts (None の場合はトップレベル)
+        thread_messages: dict[str, list[Message]] = {}
+        channel_messages: list[Message] = []
+
+        for msg in all_messages:
+            if msg.thread_ts:
+                if msg.thread_ts not in thread_messages:
+                    thread_messages[msg.thread_ts] = []
+                thread_messages[msg.thread_ts].append(msg)
+            else:
+                channel_messages.append(msg)
 
         unreplied_messages: list[Message] = []
 
-        for msg in messages:
-            # ボット自身のメッセージはスキップ
-            if msg.user.id == self._bot_user_id:
+        # トップレベルメッセージの処理
+        # 最新メッセージがボットでなく、時間条件を満たす場合のみ追加
+        if channel_messages:
+            latest_msg = channel_messages[0]
+            if (
+                latest_msg.user.id != self._bot_user_id
+                and latest_msg.timestamp.timestamp() <= cutoff_ts
+            ):
+                unreplied_messages.append(latest_msg)
+
+        # スレッド内メッセージの処理
+        for thread_ts, messages in thread_messages.items():
+            if not messages:
                 continue
-
-            # 最近すぎるメッセージはスキップ
-            msg_ts = msg.timestamp.timestamp()
-            if msg_ts > cutoff_timestamp:
-                continue
-
-            # このメッセージ以降にボットが返信しているかチェック
-            bot_replied = False
-            for bot_time in bot_message_times:
-                if bot_time > msg_ts:
-                    bot_replied = True
-                    break
-
-            if not bot_replied:
-                unreplied_messages.append(msg)
+            latest_msg = messages[0]
+            if (
+                latest_msg.user.id != self._bot_user_id
+                and latest_msg.timestamp.timestamp() <= cutoff_ts
+            ):
+                unreplied_messages.append(latest_msg)
 
         return unreplied_messages

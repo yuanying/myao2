@@ -99,3 +99,25 @@ class MessageRepository(Protocol):
             channel_id: チャンネル ID
         """
         ...
+
+    async def find_all_in_channel(
+        self,
+        channel_id: str,
+        limit: int = 50,
+        min_timestamp: datetime | None = None,
+        max_timestamp: datetime | None = None,
+        exclude_bot_user_id: str | None = None,
+    ) -> list[Message]:
+        """チャンネルの全メッセージを取得する（スレッド内メッセージを含む）
+
+        Args:
+            channel_id: チャンネル ID
+            limit: 取得する最大件数
+            min_timestamp: この時刻より後のメッセージを取得
+            max_timestamp: この時刻以前のメッセージを取得
+            exclude_bot_user_id: 除外するボットのユーザー ID
+
+        Returns:
+            メッセージリスト（新しい順）
+        """
+        ...

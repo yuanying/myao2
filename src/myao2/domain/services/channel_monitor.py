@@ -43,14 +43,18 @@ class ChannelMonitor(Protocol):
         self,
         channel_id: str,
         min_wait_seconds: int,
+        max_message_age_seconds: int | None = None,
     ) -> list[Message]:
         """未応答メッセージを取得する
 
         指定時間以上経過し、かつボットが応答していないメッセージを取得する。
+        スレッド内のメッセージも含む。
 
         Args:
             channel_id: チャンネル ID
             min_wait_seconds: 最低待機時間（秒）
+            max_message_age_seconds: 最大メッセージ経過時間（秒）。
+                この時間より古いメッセージは除外する。None の場合は制限なし。
 
         Returns:
             未応答メッセージリスト

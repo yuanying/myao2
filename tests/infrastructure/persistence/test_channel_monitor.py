@@ -301,3 +301,169 @@ class TestGetUnrepliedMessages:
 
         assert len(result) == 1
         assert result[0].id == "1.002"
+
+    async def test_get_unreplied_messages_includes_thread_replies(
+        self,
+        monitor: DBChannelMonitor,
+        message_repository: SQLiteMessageRepository,
+    ) -> None:
+        """Test that unreplied thread reply messages are included."""
+        now = datetime.now(timezone.utc)
+        # Thread parent message
+        parent_message = create_test_message(
+            id="1.000",
+            user_id="U111",
+            timestamp=now - timedelta(minutes=20),
+            thread_ts=None,
+        )
+        # Thread reply message (unreplied)
+        thread_reply = create_test_message(
+            id="1.001",
+            user_id="U222",
+            timestamp=now - timedelta(minutes=10),
+            thread_ts="1.000",
+        )
+        await message_repository.save(parent_message)
+        await message_repository.save(thread_reply)
+
+        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+
+        # Thread reply should be included
+        assert len(result) == 2
+        result_ids = {m.id for m in result}
+        assert "1.001" in result_ids
+
+    async def test_get_unreplied_messages_excludes_thread_replies_with_bot_reply(
+        self,
+        monitor: DBChannelMonitor,
+        message_repository: SQLiteMessageRepository,
+    ) -> None:
+        """Test that thread reply messages with bot reply are excluded."""
+        now = datetime.now(timezone.utc)
+        # Thread parent message
+        parent_message = create_test_message(
+            id="1.000",
+            user_id="U111",
+            timestamp=now - timedelta(minutes=30),
+            thread_ts=None,
+        )
+        # Thread reply message
+        thread_reply = create_test_message(
+            id="1.001",
+            user_id="U222",
+            timestamp=now - timedelta(minutes=20),
+            thread_ts="1.000",
+        )
+        # Bot reply in the same thread
+        bot_thread_reply = create_test_message(
+            id="1.002",
+            user_id="BOTUSER",
+            is_bot=True,
+            timestamp=now - timedelta(minutes=10),
+            thread_ts="1.000",
+        )
+        await message_repository.save(parent_message)
+        await message_repository.save(thread_reply)
+        await message_repository.save(bot_thread_reply)
+
+        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+
+        # Thread reply should be excluded (bot replied in thread)
+        result_ids = {m.id for m in result}
+        assert "1.001" not in result_ids
+
+    async def test_get_unreplied_messages_excludes_old_messages(
+        self,
+        monitor: DBChannelMonitor,
+        message_repository: SQLiteMessageRepository,
+    ) -> None:
+        """Test that messages older than max_message_age_seconds are excluded."""
+        now = datetime.now(timezone.utc)
+        # Old message (beyond max_message_age for this test: 48 hours > 24 hours limit)
+        old_message = create_test_message(
+            id="1.001",
+            user_id="U111",
+            timestamp=now - timedelta(hours=48),  # 48 hours ago
+        )
+        # Recent message (within max_message_age: 5 hours < 24 hours limit)
+        recent_message = create_test_message(
+            id="1.002",
+            user_id="U222",
+            timestamp=now - timedelta(hours=5),  # 5 hours ago
+        )
+        await message_repository.save(old_message)
+        await message_repository.save(recent_message)
+
+        result = await monitor.get_unreplied_messages(
+            "C123456",
+            min_wait_seconds=60,
+            max_message_age_seconds=86400,  # 24 hours
+        )
+
+        # Only recent message should be included
+        assert len(result) == 1
+        assert result[0].id == "1.002"
+
+    async def test_get_unreplied_messages_without_max_age(
+        self,
+        monitor: DBChannelMonitor,
+        message_repository: SQLiteMessageRepository,
+    ) -> None:
+        """Test that all messages are included when max_message_age is None."""
+        now = datetime.now(timezone.utc)
+        # Very old message
+        old_message = create_test_message(
+            id="1.001",
+            user_id="U111",
+            timestamp=now - timedelta(days=30),  # 30 days ago
+        )
+        await message_repository.save(old_message)
+
+        result = await monitor.get_unreplied_messages(
+            "C123456",
+            min_wait_seconds=60,
+            max_message_age_seconds=None,  # No limit
+        )
+
+        # Old message should be included
+        assert len(result) == 1
+        assert result[0].id == "1.001"
+
+    async def test_get_unreplied_messages_thread_bot_reply_does_not_affect_channel(
+        self,
+        monitor: DBChannelMonitor,
+        message_repository: SQLiteMessageRepository,
+    ) -> None:
+        """Test that bot reply in thread does not mark channel messages as replied."""
+        now = datetime.now(timezone.utc)
+        # Channel message (no thread)
+        channel_message = create_test_message(
+            id="1.001",
+            user_id="U111",
+            timestamp=now - timedelta(minutes=20),
+            thread_ts=None,
+        )
+        # Thread parent message
+        thread_parent = create_test_message(
+            id="1.000",
+            user_id="U222",
+            timestamp=now - timedelta(minutes=30),
+            thread_ts=None,
+        )
+        # Bot reply in thread (should not affect channel_message)
+        bot_thread_reply = create_test_message(
+            id="1.002",
+            user_id="BOTUSER",
+            is_bot=True,
+            timestamp=now - timedelta(minutes=10),
+            thread_ts="1.000",
+        )
+        await message_repository.save(channel_message)
+        await message_repository.save(thread_parent)
+        await message_repository.save(bot_thread_reply)
+
+        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+
+        # Channel message should still be unreplied
+        result_ids = {m.id for m in result}
+        assert "1.001" in result_ids
