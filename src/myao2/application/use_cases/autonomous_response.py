@@ -150,14 +150,14 @@ class AutonomousResponseUseCase:
         if not judgment_result.should_respond:
             return
 
-        # Build auxiliary context from other channels
-        auxiliary_context = await self._build_auxiliary_context(channel)
+        # Build other channel messages
+        other_channel_messages = await self._build_other_channel_messages(channel)
 
-        # Build context for response generation (with auxiliary context)
+        # Build context for response generation (with other channel messages)
         response_context = Context(
             persona=self._config.persona,
             conversation_history=conversation_history,
-            auxiliary_context=auxiliary_context,
+            other_channel_messages=other_channel_messages,
         )
 
         # Generate response
@@ -206,25 +206,23 @@ class AutonomousResponseUseCase:
                 limit=self._config.response.message_limit,
             )
 
-    async def _build_auxiliary_context(self, target_channel: Channel) -> str | None:
-        """Build auxiliary context from other channels.
+    async def _build_other_channel_messages(
+        self, target_channel: Channel
+    ) -> dict[str, list[Message]]:
+        """Build other channel messages dict.
 
-        Collects recent messages from channels other than the target channel
-        and formats them as auxiliary context.
+        Collects recent messages from channels other than the target channel.
 
         Args:
-            target_channel: The channel to exclude from auxiliary context.
+            target_channel: The channel to exclude.
 
         Returns:
-            Formatted auxiliary context string, or None if no messages.
+            Dict mapping channel names to their messages.
         """
         all_channels = await self._channel_monitor.get_channels()
         other_channels = [ch for ch in all_channels if ch.id != target_channel.id]
 
-        if not other_channels:
-            return None
-
-        context_parts: list[str] = []
+        result: dict[str, list[Message]] = {}
 
         for channel in other_channels:
             messages = await self._channel_monitor.get_recent_messages(
@@ -233,16 +231,9 @@ class AutonomousResponseUseCase:
             )
 
             if messages:
-                # Format messages for this channel
-                channel_context = f"### #{channel.name}\n"
-                for msg in messages:
-                    channel_context += f"- {msg.user.name}: {msg.text}\n"
-                context_parts.append(channel_context)
+                result[channel.name] = messages
 
-        if not context_parts:
-            return None
-
-        return "\n".join(context_parts)
+        return result
 
     def _create_bot_message(
         self,

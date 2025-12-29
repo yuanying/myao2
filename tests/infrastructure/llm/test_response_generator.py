@@ -101,14 +101,14 @@ class TestLiteLLMResponseGenerator:
         assert result == "Hello! Nice to meet you."
         mock_client.complete.assert_awaited_once()
 
-    async def test_generate_uses_context_to_build_messages(
+    async def test_generate_sends_only_system_message(
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
         user_message: Message,
         sample_context: Context,
     ) -> None:
-        """Test that Context.build_messages_for_llm is used."""
+        """Test that only system message is sent to LLM."""
         await generator.generate(
             user_message=user_message,
             context=sample_context,
@@ -117,14 +117,51 @@ class TestLiteLLMResponseGenerator:
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
 
-        # Should match Context.build_messages_for_llm output
-        assert len(messages) == 2
+        # Only one system message should be sent
+        assert len(messages) == 1
         assert messages[0]["role"] == "system"
-        assert messages[0]["content"] == "You are a friendly bot."
-        assert messages[1]["role"] == "user"
-        assert messages[1]["content"] == "Hello"
 
-    async def test_generate_with_conversation_history(
+    async def test_generate_includes_persona_in_system_prompt(
+        self,
+        generator: LiteLLMResponseGenerator,
+        mock_client: MagicMock,
+        user_message: Message,
+        sample_context: Context,
+    ) -> None:
+        """Test that persona system prompt is included."""
+        await generator.generate(
+            user_message=user_message,
+            context=sample_context,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_content = messages[0]["content"]
+
+        assert "You are a friendly bot." in system_content
+
+    async def test_generate_includes_current_message_in_system_prompt(
+        self,
+        generator: LiteLLMResponseGenerator,
+        mock_client: MagicMock,
+        user_message: Message,
+        sample_context: Context,
+    ) -> None:
+        """Test that current user message is included in system prompt."""
+        await generator.generate(
+            user_message=user_message,
+            context=sample_context,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_content = messages[0]["content"]
+
+        assert "返答すべきメッセージ" in system_content
+        assert "testuser: Hello" in system_content
+        assert "2024-01-01 12:00:00" in system_content
+
+    async def test_generate_includes_conversation_history(
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
@@ -135,7 +172,7 @@ class TestLiteLLMResponseGenerator:
         sample_channel: Channel,
         timestamp: datetime,
     ) -> None:
-        """Test generation with conversation history."""
+        """Test generation with conversation history included in system prompt."""
         history = [
             Message(
                 id="1234567890.000001",
@@ -168,16 +205,77 @@ class TestLiteLLMResponseGenerator:
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
+        system_content = messages[0]["content"]
 
-        # system + 2 history + current user message
-        assert len(messages) == 4
-        assert messages[0]["role"] == "system"
-        assert messages[1]["role"] == "user"
-        assert messages[1]["content"] == "Hi there!"
-        assert messages[2]["role"] == "assistant"
-        assert messages[2]["content"] == "Hello! How can I help?"
-        assert messages[3]["role"] == "user"
-        assert messages[3]["content"] == "Hello"
+        # Only one system message
+        assert len(messages) == 1
+        # History should be in system prompt
+        assert "会話履歴" in system_content
+        assert "testuser: Hi there!" in system_content
+        assert "myao: Hello! How can I help?" in system_content
+
+    async def test_generate_includes_other_channel_messages(
+        self,
+        generator: LiteLLMResponseGenerator,
+        mock_client: MagicMock,
+        user_message: Message,
+        persona_config: PersonaConfig,
+        sample_user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that other channel messages are included in system prompt."""
+        random_channel = Channel(id="C456", name="random")
+        other_messages = {
+            "random": [
+                Message(
+                    id="msg001",
+                    channel=random_channel,
+                    user=sample_user,
+                    text="今日は暑いね",
+                    timestamp=timestamp,
+                    thread_ts=None,
+                    mentions=[],
+                ),
+            ],
+        }
+        context = Context(
+            persona=persona_config,
+            conversation_history=[],
+            other_channel_messages=other_messages,
+        )
+
+        await generator.generate(
+            user_message=user_message,
+            context=context,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_content = messages[0]["content"]
+
+        assert "他のチャンネルでの最近の会話" in system_content
+        assert "#random" in system_content
+        assert "今日は暑いね" in system_content
+
+    async def test_generate_includes_instruction_at_end(
+        self,
+        generator: LiteLLMResponseGenerator,
+        mock_client: MagicMock,
+        user_message: Message,
+        sample_context: Context,
+    ) -> None:
+        """Test that instruction is included at the end of system prompt."""
+        await generator.generate(
+            user_message=user_message,
+            context=sample_context,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_content = messages[0]["content"]
+
+        assert "上記の会話履歴と参考情報を元に" in system_content
+        assert "自然な返答を生成してください" in system_content
 
     async def test_generate_propagates_error(
         self,
@@ -194,3 +292,22 @@ class TestLiteLLMResponseGenerator:
                 user_message=user_message,
                 context=sample_context,
             )
+
+    async def test_generate_no_other_channels_section_when_empty(
+        self,
+        generator: LiteLLMResponseGenerator,
+        mock_client: MagicMock,
+        user_message: Message,
+        sample_context: Context,
+    ) -> None:
+        """Test that other channels section is not included when empty."""
+        await generator.generate(
+            user_message=user_message,
+            context=sample_context,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_content = messages[0]["content"]
+
+        assert "他のチャンネルでの最近の会話" not in system_content
