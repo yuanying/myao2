@@ -6,6 +6,7 @@ from myao2.infrastructure.llm.exceptions import (
     LLMError,
     LLMRateLimitError,
 )
+from myao2.infrastructure.llm.memory_summarizer import LLMMemorySummarizer
 from myao2.infrastructure.llm.response_generator import LiteLLMResponseGenerator
 from myao2.infrastructure.llm.response_judgment import LLMResponseJudgment
 
@@ -13,6 +14,7 @@ __all__ = [
     "LLMAuthenticationError",
     "LLMClient",
     "LLMError",
+    "LLMMemorySummarizer",
     "LLMRateLimitError",
     "LLMResponseJudgment",
     "LiteLLMResponseGenerator",
