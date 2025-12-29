@@ -451,10 +451,10 @@ class TestAutonomousResponseUseCaseHistoryFetching:
         mock_conversation_history_service.fetch_thread_history.assert_not_awaited()
 
 
-class TestAutonomousResponseUseCaseAuxiliaryContext:
-    """Tests for auxiliary context building."""
+class TestAutonomousResponseUseCaseOtherChannelMessages:
+    """Tests for other channel messages building."""
 
-    async def test_auxiliary_context_excludes_target_channel(
+    async def test_other_channel_messages_excludes_target_channel(
         self,
         use_case: AutonomousResponseUseCase,
         mock_channel_monitor: Mock,
@@ -464,7 +464,7 @@ class TestAutonomousResponseUseCaseAuxiliaryContext:
         user: User,
         timestamp: datetime,
     ) -> None:
-        """Test that auxiliary context excludes the target channel."""
+        """Test that other_channel_messages excludes the target channel."""
         other_channel = Channel(id="C456", name="random")
         other_message = Message(
             id="M002",
@@ -495,17 +495,18 @@ class TestAutonomousResponseUseCaseAuxiliaryContext:
 
         await use_case.check_channel(channel)
 
-        # Verify response generator was called with auxiliary context
+        # Verify response generator was called with other_channel_messages
         mock_response_generator.generate.assert_awaited_once()
         call_args = mock_response_generator.generate.call_args
         context = call_args.kwargs["context"]
         assert isinstance(context, Context)
-        # Auxiliary context should contain the other channel's message
-        if context.auxiliary_context:
-            assert "random" in context.auxiliary_context
-            assert "Message in other channel" in context.auxiliary_context
+        # other_channel_messages should contain the other channel's message
+        assert "random" in context.other_channel_messages
+        assert len(context.other_channel_messages["random"]) == 1
+        other_msg = context.other_channel_messages["random"][0]
+        assert other_msg.text == "Message in other channel"
 
-    async def test_auxiliary_context_from_multiple_channels(
+    async def test_other_channel_messages_from_multiple_channels(
         self,
         use_case: AutonomousResponseUseCase,
         mock_channel_monitor: Mock,
@@ -515,7 +516,7 @@ class TestAutonomousResponseUseCaseAuxiliaryContext:
         user: User,
         timestamp: datetime,
     ) -> None:
-        """Test that auxiliary context includes messages from multiple channels."""
+        """Test that other_channel_messages includes messages from multiple channels."""
         channel2 = Channel(id="C456", name="random")
         channel3 = Channel(id="C789", name="dev")
 
@@ -570,10 +571,11 @@ class TestAutonomousResponseUseCaseAuxiliaryContext:
         call_args = mock_response_generator.generate.call_args
         context = call_args.kwargs["context"]
 
-        if context.auxiliary_context:
-            in_random = "random" in context.auxiliary_context
-            in_dev = "dev" in context.auxiliary_context
-            assert in_random or in_dev
+        # Both channels should be in other_channel_messages
+        assert "random" in context.other_channel_messages
+        assert "dev" in context.other_channel_messages
+        assert context.other_channel_messages["random"][0].text == "Random talk"
+        assert context.other_channel_messages["dev"][0].text == "Dev discussion"
 
 
 class TestAutonomousResponseUseCaseMessageSaving:

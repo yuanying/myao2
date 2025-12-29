@@ -3,6 +3,11 @@
 import logging
 
 from myao2.domain.entities import Context, Message
+from myao2.domain.services.message_formatter import (
+    format_conversation_history,
+    format_message_with_metadata,
+    format_other_channels,
+)
 from myao2.infrastructure.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -37,7 +42,8 @@ class LiteLLMResponseGenerator:
     ) -> str:
         """Generate a response.
 
-        Uses Context to build the message list for the LLM.
+        Builds a system prompt from context and user message,
+        then sends it to the LLM.
 
         Args:
             user_message: User's message to respond to.
@@ -49,7 +55,8 @@ class LiteLLMResponseGenerator:
         Raises:
             LLMError: If response generation fails.
         """
-        messages = context.build_messages_for_llm(user_message)
+        system_prompt = self._build_system_prompt(context, user_message)
+        messages = [{"role": "system", "content": system_prompt}]
 
         if self._should_log():
             self._log_messages(messages)
@@ -60,6 +67,41 @@ class LiteLLMResponseGenerator:
             self._log_response(response)
 
         return response
+
+    def _build_system_prompt(self, context: Context, current_message: Message) -> str:
+        """Build system prompt from context and current message.
+
+        Args:
+            context: Conversation context.
+            current_message: Current user message to respond to.
+
+        Returns:
+            Complete system prompt string.
+        """
+        parts = [context.persona.system_prompt]
+
+        # Add conversation history
+        parts.append("\n\n## 会話履歴")
+        parts.append(format_conversation_history(context.conversation_history))
+
+        # Add current message to respond to
+        parts.append("\n\n## 返答すべきメッセージ")
+        parts.append(format_message_with_metadata(current_message))
+
+        # Add other channel messages if present
+        other_channels = format_other_channels(context.other_channel_messages)
+        if other_channels:
+            parts.append("\n\n## 他のチャンネルでの最近の会話")
+            parts.append(other_channels)
+
+        # Add instruction
+        parts.append("\n\n---")
+        parts.append(
+            "\n上記の会話履歴と参考情報を元に、"
+            "「返答すべきメッセージ」に対して自然な返答を生成してください。"
+        )
+
+        return "\n".join(parts)
 
     def _should_log(self) -> bool:
         """Check if logging should occur."""

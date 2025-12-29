@@ -60,325 +60,66 @@ def create_test_message(
     )
 
 
-class TestBuildSystemPrompt:
-    """Tests for build_system_prompt."""
+class TestContextCreation:
+    """Tests for Context creation."""
 
-    def test_returns_persona_system_prompt(self, persona_config: PersonaConfig) -> None:
-        """Test that build_system_prompt returns persona's system prompt."""
+    def test_creates_with_persona_only(self, persona_config: PersonaConfig) -> None:
+        """Test that Context can be created with only persona."""
+        context = Context(persona=persona_config)
+
+        assert context.persona == persona_config
+        assert context.conversation_history == []
+        assert context.other_channel_messages == {}
+
+    def test_creates_with_conversation_history(
+        self,
+        persona_config: PersonaConfig,
+        sample_user: User,
+        sample_channel: Channel,
+        timestamp: datetime,
+    ) -> None:
+        """Test that Context can be created with conversation history."""
+        history = [
+            create_test_message(
+                text="こんにちは",
+                user=sample_user,
+                channel=sample_channel,
+                timestamp=timestamp,
+            ),
+        ]
+        context = Context(
+            persona=persona_config,
+            conversation_history=history,
+        )
+
+        assert context.conversation_history == history
+
+    def test_creates_with_other_channel_messages(
+        self,
+        persona_config: PersonaConfig,
+        sample_user: User,
+        sample_channel: Channel,
+        timestamp: datetime,
+    ) -> None:
+        """Test that Context can be created with other channel messages."""
+        random_channel = Channel(id="C456", name="random")
+        other_messages = {
+            "random": [
+                create_test_message(
+                    text="今日は暑いね",
+                    user=sample_user,
+                    channel=random_channel,
+                    timestamp=timestamp,
+                ),
+            ],
+        }
         context = Context(
             persona=persona_config,
             conversation_history=[],
+            other_channel_messages=other_messages,
         )
 
-        result = context.build_system_prompt()
-
-        assert result == persona_config.system_prompt
-        assert result == "あなたは友達のように振る舞うチャットボットです。"
-
-
-class TestBuildMessagesForLlm:
-    """Tests for build_messages_for_llm."""
-
-    def test_no_history(
-        self,
-        persona_config: PersonaConfig,
-        sample_user: User,
-        sample_channel: Channel,
-        timestamp: datetime,
-    ) -> None:
-        """Test with no conversation history."""
-        context = Context(
-            persona=persona_config,
-            conversation_history=[],
-        )
-        user_message = create_test_message(
-            text="@myao こんにちは",
-            user=sample_user,
-            channel=sample_channel,
-            timestamp=timestamp,
-        )
-
-        messages = context.build_messages_for_llm(user_message)
-
-        assert len(messages) == 2
-        assert messages[0]["role"] == "system"
-        assert messages[0]["content"] == persona_config.system_prompt
-        assert messages[1]["role"] == "user"
-        assert messages[1]["content"] == "@myao こんにちは"
-
-    def test_single_history(
-        self,
-        persona_config: PersonaConfig,
-        sample_user: User,
-        sample_channel: Channel,
-        timestamp: datetime,
-    ) -> None:
-        """Test with single conversation history."""
-        history_message = create_test_message(
-            text="こんにちは！",
-            user=sample_user,
-            channel=sample_channel,
-            timestamp=timestamp,
-            message_id="1234567890.000001",
-        )
-        context = Context(
-            persona=persona_config,
-            conversation_history=[history_message],
-        )
-        user_message = create_test_message(
-            text="今日の調子はどう？",
-            user=sample_user,
-            channel=sample_channel,
-            timestamp=timestamp,
-            message_id="1234567890.000002",
-        )
-
-        messages = context.build_messages_for_llm(user_message)
-
-        assert len(messages) == 3
-        assert messages[0]["role"] == "system"
-        assert messages[1]["role"] == "user"
-        assert messages[1]["content"] == "こんにちは！"
-        assert messages[2]["role"] == "user"
-        assert messages[2]["content"] == "今日の調子はどう？"
-
-    def test_multiple_history(
-        self,
-        persona_config: PersonaConfig,
-        sample_user: User,
-        sample_bot: User,
-        sample_channel: Channel,
-        timestamp: datetime,
-    ) -> None:
-        """Test with multiple conversation history (user and bot)."""
-        history = [
-            create_test_message(
-                text="こんにちは！",
-                user=sample_user,
-                channel=sample_channel,
-                timestamp=timestamp,
-                message_id="1234567890.000001",
-            ),
-            create_test_message(
-                text="こんにちは！何かお手伝いできることはありますか？",
-                user=sample_bot,
-                channel=sample_channel,
-                timestamp=timestamp,
-                message_id="1234567890.000002",
-            ),
-            create_test_message(
-                text="今日の調子はどう？",
-                user=sample_user,
-                channel=sample_channel,
-                timestamp=timestamp,
-                message_id="1234567890.000003",
-            ),
-        ]
-        context = Context(
-            persona=persona_config,
-            conversation_history=history,
-        )
-        user_message = create_test_message(
-            text="何か面白い話ある？",
-            user=sample_user,
-            channel=sample_channel,
-            timestamp=timestamp,
-            message_id="1234567890.000004",
-        )
-
-        messages = context.build_messages_for_llm(user_message)
-
-        assert len(messages) == 5
-        # System prompt
-        assert messages[0]["role"] == "system"
-        # History (oldest first)
-        assert messages[1]["role"] == "user"
-        assert messages[1]["content"] == "こんにちは！"
-        assert messages[2]["role"] == "assistant"
-        assert messages[2]["content"] == (
-            "こんにちは！何かお手伝いできることはありますか？"
-        )
-        assert messages[3]["role"] == "user"
-        assert messages[3]["content"] == "今日の調子はどう？"
-        # Current message
-        assert messages[4]["role"] == "user"
-        assert messages[4]["content"] == "何か面白い話ある？"
-
-    def test_role_determination(
-        self,
-        persona_config: PersonaConfig,
-        sample_user: User,
-        sample_bot: User,
-        sample_channel: Channel,
-        timestamp: datetime,
-    ) -> None:
-        """Test that roles are correctly determined based on is_bot."""
-        history = [
-            create_test_message(
-                text="User message",
-                user=sample_user,
-                channel=sample_channel,
-                timestamp=timestamp,
-                message_id="1234567890.000001",
-            ),
-            create_test_message(
-                text="Bot response",
-                user=sample_bot,
-                channel=sample_channel,
-                timestamp=timestamp,
-                message_id="1234567890.000002",
-            ),
-        ]
-        context = Context(
-            persona=persona_config,
-            conversation_history=history,
-        )
-        user_message = create_test_message(
-            text="Another user message",
-            user=sample_user,
-            channel=sample_channel,
-            timestamp=timestamp,
-        )
-
-        messages = context.build_messages_for_llm(user_message)
-
-        # User messages should have role="user"
-        assert messages[1]["role"] == "user"
-        # Bot messages should have role="assistant"
-        assert messages[2]["role"] == "assistant"
-
-    def test_message_order(
-        self,
-        persona_config: PersonaConfig,
-        sample_user: User,
-        sample_bot: User,
-        sample_channel: Channel,
-        timestamp: datetime,
-    ) -> None:
-        """Test that messages are in correct order: system -> history -> user."""
-        history = [
-            create_test_message(
-                text="First",
-                user=sample_user,
-                channel=sample_channel,
-                timestamp=timestamp,
-                message_id="1234567890.000001",
-            ),
-            create_test_message(
-                text="Second",
-                user=sample_bot,
-                channel=sample_channel,
-                timestamp=timestamp,
-                message_id="1234567890.000002",
-            ),
-        ]
-        context = Context(
-            persona=persona_config,
-            conversation_history=history,
-        )
-        user_message = create_test_message(
-            text="Current",
-            user=sample_user,
-            channel=sample_channel,
-            timestamp=timestamp,
-        )
-
-        messages = context.build_messages_for_llm(user_message)
-
-        # Order: system -> history[0] -> history[1] -> current
-        assert messages[0]["role"] == "system"
-        assert messages[1]["content"] == "First"
-        assert messages[2]["content"] == "Second"
-        assert messages[3]["content"] == "Current"
-
-
-class TestDuplicateMessageHandling:
-    """Tests for handling duplicate messages in history."""
-
-    def test_skips_duplicate_user_message_in_history(
-        self,
-        persona_config: PersonaConfig,
-        sample_user: User,
-        sample_bot: User,
-        sample_channel: Channel,
-        timestamp: datetime,
-    ) -> None:
-        """Test that duplicate user message in history is skipped."""
-        current_message = create_test_message(
-            text="Hello",
-            user=sample_user,
-            channel=sample_channel,
-            timestamp=timestamp,
-            message_id="1234567890.000003",
-        )
-        # History already contains the current message
-        history = [
-            create_test_message(
-                text="Hi there!",
-                user=sample_user,
-                channel=sample_channel,
-                timestamp=timestamp,
-                message_id="1234567890.000001",
-            ),
-            create_test_message(
-                text="Hi! How can I help?",
-                user=sample_bot,
-                channel=sample_channel,
-                timestamp=timestamp,
-                message_id="1234567890.000002",
-            ),
-            current_message,  # This is the same message we're passing
-        ]
-        context = Context(
-            persona=persona_config,
-            conversation_history=history,
-        )
-
-        messages = context.build_messages_for_llm(current_message)
-
-        # Should have: system + 2 history + 1 current (not duplicated)
-        assert len(messages) == 4
-        assert messages[0]["role"] == "system"
-        assert messages[1]["content"] == "Hi there!"
-        assert messages[2]["content"] == "Hi! How can I help?"
-        assert messages[3]["content"] == "Hello"
-
-    def test_no_duplicate_when_history_ends_with_different_message(
-        self,
-        persona_config: PersonaConfig,
-        sample_user: User,
-        sample_bot: User,
-        sample_channel: Channel,
-        timestamp: datetime,
-    ) -> None:
-        """Test that no message is skipped when last history differs."""
-        history = [
-            create_test_message(
-                text="Previous message",
-                user=sample_user,
-                channel=sample_channel,
-                timestamp=timestamp,
-                message_id="1234567890.000001",
-            ),
-        ]
-        context = Context(
-            persona=persona_config,
-            conversation_history=history,
-        )
-        current_message = create_test_message(
-            text="Current message",
-            user=sample_user,
-            channel=sample_channel,
-            timestamp=timestamp,
-            message_id="1234567890.000002",
-        )
-
-        messages = context.build_messages_for_llm(current_message)
-
-        # Should have: system + 1 history + 1 current
-        assert len(messages) == 3
-        assert messages[1]["content"] == "Previous message"
-        assert messages[2]["content"] == "Current message"
+        assert context.other_channel_messages == other_messages
 
 
 class TestContextImmutability:
@@ -394,57 +135,74 @@ class TestContextImmutability:
         with pytest.raises(AttributeError):
             context.persona = persona_config  # type: ignore[misc]
 
-
-class TestAuxiliaryContext:
-    """Tests for auxiliary context functionality."""
-
-    def test_auxiliary_context_default_none(
-        self,
-        persona_config: PersonaConfig,
+    def test_cannot_modify_conversation_history_attribute(
+        self, persona_config: PersonaConfig
     ) -> None:
-        """Test that auxiliary_context defaults to None."""
+        """Test that conversation_history attribute cannot be replaced."""
         context = Context(persona=persona_config, conversation_history=[])
-        assert context.auxiliary_context is None
 
-    def test_auxiliary_context_set(
+        with pytest.raises(AttributeError):
+            context.conversation_history = []  # type: ignore[misc]
+
+    def test_cannot_modify_other_channel_messages_attribute(
+        self, persona_config: PersonaConfig
+    ) -> None:
+        """Test that other_channel_messages attribute cannot be replaced."""
+        context = Context(persona=persona_config)
+
+        with pytest.raises(AttributeError):
+            context.other_channel_messages = {}  # type: ignore[misc]
+
+
+class TestOtherChannelMessages:
+    """Tests for other_channel_messages field."""
+
+    def test_other_channel_messages_default_empty_dict(
         self,
         persona_config: PersonaConfig,
     ) -> None:
-        """Test that auxiliary_context can be set."""
-        aux = "## 最近のチャンネルでの会話\n#general:\n- user1: テスト"
+        """Test that other_channel_messages defaults to empty dict."""
+        context = Context(persona=persona_config, conversation_history=[])
+        assert context.other_channel_messages == {}
+
+    def test_other_channel_messages_with_multiple_channels(
+        self,
+        persona_config: PersonaConfig,
+        sample_user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that other_channel_messages can hold multiple channels."""
+        random_channel = Channel(id="C456", name="random")
+        dev_channel = Channel(id="C789", name="dev")
+
+        other_messages = {
+            "random": [
+                create_test_message(
+                    text="今日は暑いね",
+                    user=sample_user,
+                    channel=random_channel,
+                    timestamp=timestamp,
+                    message_id="msg001",
+                ),
+            ],
+            "dev": [
+                create_test_message(
+                    text="PRレビューお願いします",
+                    user=sample_user,
+                    channel=dev_channel,
+                    timestamp=timestamp,
+                    message_id="msg002",
+                ),
+            ],
+        }
         context = Context(
             persona=persona_config,
             conversation_history=[],
-            auxiliary_context=aux,
+            other_channel_messages=other_messages,
         )
-        assert context.auxiliary_context == aux
 
-
-class TestBuildSystemPromptWithAuxiliaryContext:
-    """Tests for build_system_prompt with auxiliary context."""
-
-    def test_without_auxiliary_context(
-        self,
-        persona_config: PersonaConfig,
-    ) -> None:
-        """Test that persona prompt only is returned when no auxiliary context."""
-        context = Context(persona=persona_config, conversation_history=[])
-        result = context.build_system_prompt()
-        assert result == persona_config.system_prompt
-        assert "参考情報" not in result
-
-    def test_with_auxiliary_context(
-        self,
-        persona_config: PersonaConfig,
-    ) -> None:
-        """Test that auxiliary context is appended to system prompt."""
-        aux = "#general:\n- user1: こんにちは"
-        context = Context(
-            persona=persona_config,
-            conversation_history=[],
-            auxiliary_context=aux,
-        )
-        result = context.build_system_prompt()
-        assert persona_config.system_prompt in result
-        assert "## 参考情報" in result
-        assert aux in result
+        assert len(context.other_channel_messages) == 2
+        assert "random" in context.other_channel_messages
+        assert "dev" in context.other_channel_messages
+        assert len(context.other_channel_messages["random"]) == 1
+        assert len(context.other_channel_messages["dev"]) == 1
