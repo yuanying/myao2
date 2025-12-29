@@ -31,7 +31,13 @@ SYSTEM_PROMPT_TEMPLATE = """あなたは会話への参加判断を行うアシ�
 
 必ずJSON形式で回答してください。他のテキストは含めないでください。
 回答形式：
-{{"should_respond": true/false, "reason": "理由"}}"""
+{{"should_respond": true/false, "reason": "理由", "confidence": 0.0-1.0}}
+
+confidence について：
+- 1.0: 完全に確信（状況が明確で、今後も変わる可能性が低い）
+- 0.7-0.9: かなり確信（多少の不確実性はあるが、ほぼ判断可能）
+- 0.4-0.6: やや不確実（状況が変わる可能性がある）
+- 0.0-0.3: 非常に不確実（追加情報が必要）"""
 
 
 class LLMResponseJudgment:
@@ -178,14 +184,20 @@ class LLMResponseJudgment:
 
             should_respond = data.get("should_respond", False)
             reason = data.get("reason", "")
+            confidence = data.get("confidence", 1.0)
+
+            # Clamp confidence to valid range [0.0, 1.0]
+            confidence = max(0.0, min(1.0, float(confidence)))
 
             return JudgmentResult(
                 should_respond=bool(should_respond),
                 reason=reason,
+                confidence=confidence,
             )
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
             logger.warning("Failed to parse LLM response: %s", e)
             return JudgmentResult(
                 should_respond=False,
                 reason=f"Failed to parse LLM response: {e}",
+                confidence=0.0,  # パース失敗時は低い confidence
             )

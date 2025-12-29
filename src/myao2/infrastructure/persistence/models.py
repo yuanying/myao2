@@ -49,3 +49,24 @@ class ChannelModel(SQLModel, table=True):
     channel_id: str = Field(unique=True, index=True)
     name: str
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class JudgmentCacheModel(SQLModel, table=True):
+    """応答判定キャッシュテーブル"""
+
+    __tablename__ = "judgment_caches"
+
+    id: int | None = Field(default=None, primary_key=True)
+    channel_id: str = Field(index=True)
+    thread_ts: str | None = Field(default=None, index=True)
+    should_respond: bool
+    confidence: float
+    reason: str
+    latest_message_ts: str  # キャッシュ作成時の最新メッセージのタイムスタンプ
+    next_check_at: datetime = Field(index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        UniqueConstraint("channel_id", "thread_ts", name="uq_channel_thread"),
+    )

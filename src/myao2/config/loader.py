@@ -9,6 +9,8 @@ import yaml
 
 from myao2.config.models import (
     Config,
+    JudgmentSkipConfig,
+    JudgmentSkipThreshold,
     LLMConfig,
     LoggingConfig,
     MemoryConfig,
@@ -167,10 +169,32 @@ def load_config(path: str | Path) -> Config:
 
     # ResponseConfig (optional, defaults used if not present)
     response_data = data.get("response", {})
+
+    # JudgmentSkipConfig (optional)
+    judgment_skip_config: JudgmentSkipConfig | None = None
+    judgment_skip_data = response_data.get("judgment_skip")
+    if judgment_skip_data is not None:
+        thresholds: list[JudgmentSkipThreshold] = []
+        thresholds_data = judgment_skip_data.get("thresholds", [])
+        for threshold_data in thresholds_data:
+            thresholds.append(
+                JudgmentSkipThreshold(
+                    min_confidence=threshold_data.get("min_confidence", 0.0),
+                    skip_seconds=threshold_data.get("skip_seconds", 600),
+                )
+            )
+
+        judgment_skip_config = JudgmentSkipConfig(
+            enabled=judgment_skip_data.get("enabled", True),
+            thresholds=thresholds if thresholds else JudgmentSkipConfig().thresholds,
+            default_skip_seconds=judgment_skip_data.get("default_skip_seconds", 600),
+        )
+
     response = ResponseConfig(
         check_interval_seconds=response_data.get("check_interval_seconds", 60),
         min_wait_seconds=response_data.get("min_wait_seconds", 300),
         message_limit=response_data.get("message_limit", 20),
+        judgment_skip=judgment_skip_config,
     )
 
     # LoggingConfig (optional)
