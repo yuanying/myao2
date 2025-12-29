@@ -260,12 +260,12 @@ def parse_thread_scope_id(scope_id: str) -> tuple[str, str]:
 
 ## 完了基準
 
-- [ ] MemoryScope 列挙型が定義されている
-- [ ] MemoryType 列挙型が定義されている
-- [ ] is_valid_memory_combination 関数が定義されている
-- [ ] Memory エンティティがイミュータブルに定義されている
-- [ ] Memory の `__post_init__` でバリデーションが行われる
-- [ ] create_memory ファクトリ関数が定義されている
-- [ ] make_thread_scope_id / parse_thread_scope_id が定義されている
-- [ ] `__init__.py` でエクスポートされている
-- [ ] 全テストケースが通過する
+- [x] MemoryScope 列挙型が定義されている
+- [x] MemoryType 列挙型が定義されている
+- [x] is_valid_memory_combination 関数が定義されている
+- [x] Memory エンティティがイミュータブルに定義されている
+- [x] Memory の `__post_init__` でバリデーションが行われる
+- [x] create_memory ファクトリ関数が定義されている
+- [x] make_thread_scope_id / parse_thread_scope_id が定義されている
+- [x] `__init__.py` でエクスポートされている
+- [x] 全テストケースが通過する

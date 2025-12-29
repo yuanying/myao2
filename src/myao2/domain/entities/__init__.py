@@ -4,6 +4,14 @@ from myao2.domain.entities.channel import Channel
 from myao2.domain.entities.context import Context
 from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
+from myao2.domain.entities.memory import (
+    Memory,
+    MemoryScope,
+    MemoryType,
+    create_memory,
+    make_thread_scope_id,
+    parse_thread_scope_id,
+)
 from myao2.domain.entities.message import Message
 from myao2.domain.entities.user import User
 
@@ -12,6 +20,12 @@ __all__ = [
     "Context",
     "JudgmentCache",
     "JudgmentResult",
+    "Memory",
+    "MemoryScope",
+    "MemoryType",
     "Message",
     "User",
+    "create_memory",
+    "make_thread_scope_id",
+    "parse_thread_scope_id",
 ]
