@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from slack_sdk.errors import SlackApiError
 
+from myao2.domain.exceptions import ChannelNotAccessibleError
 from myao2.infrastructure.slack import SlackMessagingService
 
 
@@ -55,13 +56,64 @@ class TestSlackMessagingService:
             thread_ts="1234567890.123456",
         )
 
-    async def test_send_message_api_error(
+    async def test_send_message_not_in_channel_raises_channel_not_accessible(
         self, service: SlackMessagingService, mock_client: MagicMock
     ) -> None:
-        """Test that API errors are propagated."""
+        """Test that not_in_channel error is converted to ChannelNotAccessibleError."""
+        mock_client.chat_postMessage.side_effect = SlackApiError(
+            message="not_in_channel",
+            response={"error": "not_in_channel"},
+        )
+
+        with pytest.raises(ChannelNotAccessibleError) as exc_info:
+            await service.send_message(
+                channel_id="C123456",
+                text="Hello",
+            )
+
+        assert exc_info.value.channel_id == "C123456"
+
+    async def test_send_message_channel_not_found_raises_channel_not_accessible(
+        self, service: SlackMessagingService, mock_client: MagicMock
+    ) -> None:
+        """Test channel_not_found converts to ChannelNotAccessibleError."""
         mock_client.chat_postMessage.side_effect = SlackApiError(
             message="channel_not_found",
             response={"error": "channel_not_found"},
+        )
+
+        with pytest.raises(ChannelNotAccessibleError) as exc_info:
+            await service.send_message(
+                channel_id="C123456",
+                text="Hello",
+            )
+
+        assert exc_info.value.channel_id == "C123456"
+
+    async def test_send_message_is_archived_raises_channel_not_accessible(
+        self, service: SlackMessagingService, mock_client: MagicMock
+    ) -> None:
+        """Test that is_archived error is converted to ChannelNotAccessibleError."""
+        mock_client.chat_postMessage.side_effect = SlackApiError(
+            message="is_archived",
+            response={"error": "is_archived"},
+        )
+
+        with pytest.raises(ChannelNotAccessibleError) as exc_info:
+            await service.send_message(
+                channel_id="C123456",
+                text="Hello",
+            )
+
+        assert exc_info.value.channel_id == "C123456"
+
+    async def test_send_message_other_api_error_propagated(
+        self, service: SlackMessagingService, mock_client: MagicMock
+    ) -> None:
+        """Test that other API errors are propagated as SlackApiError."""
+        mock_client.chat_postMessage.side_effect = SlackApiError(
+            message="rate_limited",
+            response={"error": "rate_limited"},
         )
 
         with pytest.raises(SlackApiError):

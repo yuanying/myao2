@@ -136,7 +136,12 @@ async def main() -> None:
     )
 
     register_handlers(
-        app, reply_use_case, event_adapter, bot_user_id, message_repository
+        app,
+        reply_use_case,
+        event_adapter,
+        bot_user_id,
+        message_repository,
+        channel_repository,
     )
 
     # Sync channels from Slack at startup
@@ -170,6 +175,8 @@ async def main() -> None:
         conversation_history_service=conversation_history_service,
         config=config,
         bot_user_id=bot_user_id,
+        channel_repository=channel_repository,
+        channel_sync_service=channel_initializer,
     )
 
     periodic_checker = PeriodicChecker(

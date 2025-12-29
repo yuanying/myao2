@@ -86,6 +86,27 @@ class SQLiteChannelRepository:
                 return None
             return self._to_entity(model)
 
+    async def delete(self, channel_id: str) -> bool:
+        """チャンネルを削除する
+
+        Args:
+            channel_id: 削除するチャンネルの ID
+
+        Returns:
+            削除が成功したかどうか（存在しなかった場合は False）
+        """
+        async with self._session_factory() as session:
+            result = await session.exec(
+                select(ChannelModel).where(ChannelModel.channel_id == channel_id)
+            )
+            existing = result.first()
+
+            if existing:
+                await session.delete(existing)
+                await session.commit()
+                return True
+            return False
+
     def _to_entity(self, model: ChannelModel) -> Channel:
         """モデルをエンティティに変換する
 

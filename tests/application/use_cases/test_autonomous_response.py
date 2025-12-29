@@ -20,6 +20,7 @@ from myao2.config import (
 from myao2.domain.entities import Channel, Context, Message, User
 from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
+from myao2.domain.exceptions import ChannelNotAccessibleError
 
 
 @pytest.fixture
@@ -95,6 +96,22 @@ def mock_conversation_history_service() -> Mock:
 
 
 @pytest.fixture
+def mock_channel_repository() -> Mock:
+    """Create mock channel repository."""
+    repo = Mock()
+    repo.delete = AsyncMock(return_value=True)
+    return repo
+
+
+@pytest.fixture
+def mock_channel_sync_service() -> Mock:
+    """Create mock channel sync service."""
+    service = Mock()
+    service.sync_with_cleanup = AsyncMock(return_value=([], []))
+    return service
+
+
+@pytest.fixture
 def config() -> Config:
     """Create test config."""
     return Config(
@@ -119,6 +136,8 @@ def use_case(
     mock_message_repository: Mock,
     mock_judgment_cache_repository: Mock,
     mock_conversation_history_service: Mock,
+    mock_channel_repository: Mock,
+    mock_channel_sync_service: Mock,
     config: Config,
     bot_user_id: str,
 ) -> AutonomousResponseUseCase:
@@ -131,6 +150,8 @@ def use_case(
         message_repository=mock_message_repository,
         judgment_cache_repository=mock_judgment_cache_repository,
         conversation_history_service=mock_conversation_history_service,
+        channel_repository=mock_channel_repository,
+        channel_sync_service=mock_channel_sync_service,
         config=config,
         bot_user_id=bot_user_id,
     )
@@ -1101,3 +1122,132 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         expected_skip = timedelta(seconds=600)
         actual_skip = saved_cache.next_check_at - saved_cache.created_at
         assert abs(actual_skip.total_seconds() - expected_skip.total_seconds()) < 5
+
+
+class TestAutonomousResponseUseCaseChannelNotAccessible:
+    """Tests for ChannelNotAccessibleError handling."""
+
+    async def test_channel_not_accessible_removes_channel_from_db(
+        self,
+        use_case: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_messaging_service: Mock,
+        mock_channel_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that ChannelNotAccessibleError removes channel from DB."""
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text="Hello!",
+            timestamp=timestamp,
+            mentions=[],
+        )
+        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_response_judgment.judge.return_value = JudgmentResult(
+            should_respond=True,
+            reason="Reply needed",
+            confidence=0.9,
+        )
+        # Simulate ChannelNotAccessibleError when sending message
+        mock_messaging_service.send_message.side_effect = ChannelNotAccessibleError(
+            channel.id
+        )
+
+        await use_case.check_channel(channel)
+
+        # Channel should be removed from DB
+        mock_channel_repository.delete.assert_awaited_once_with(channel.id)
+
+    async def test_channel_not_accessible_does_not_save_bot_message(
+        self,
+        use_case: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_messaging_service: Mock,
+        mock_message_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that bot message is not saved when ChannelNotAccessibleError occurs."""
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text="Hello!",
+            timestamp=timestamp,
+            mentions=[],
+        )
+        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_response_judgment.judge.return_value = JudgmentResult(
+            should_respond=True,
+            reason="Reply needed",
+            confidence=0.9,
+        )
+        mock_messaging_service.send_message.side_effect = ChannelNotAccessibleError(
+            channel.id
+        )
+
+        await use_case.check_channel(channel)
+
+        # Bot message should NOT be saved
+        mock_message_repository.save.assert_not_awaited()
+
+    async def test_channel_not_accessible_logs_warning(
+        self,
+        use_case: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_messaging_service: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test that ChannelNotAccessibleError is logged as warning."""
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text="Hello!",
+            timestamp=timestamp,
+            mentions=[],
+        )
+        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_response_judgment.judge.return_value = JudgmentResult(
+            should_respond=True,
+            reason="Reply needed",
+            confidence=0.9,
+        )
+        mock_messaging_service.send_message.side_effect = ChannelNotAccessibleError(
+            channel.id
+        )
+
+        with caplog.at_level(logging.WARNING):
+            await use_case.check_channel(channel)
+
+        assert (
+            "no longer accessible" in caplog.text or "removing" in caplog.text.lower()
+        )
+
+
+class TestAutonomousResponseUseCaseChannelSync:
+    """Tests for channel synchronization functionality."""
+
+    async def test_execute_calls_sync_with_cleanup(
+        self,
+        use_case: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_channel_sync_service: Mock,
+    ) -> None:
+        """Test that execute calls sync_with_cleanup."""
+        mock_channel_monitor.get_channels.return_value = []
+
+        await use_case.execute()
+
+        mock_channel_sync_service.sync_with_cleanup.assert_awaited_once()

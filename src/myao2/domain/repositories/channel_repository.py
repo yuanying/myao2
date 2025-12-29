@@ -40,3 +40,14 @@ class ChannelRepository(Protocol):
             チャンネル（存在しない場合は None）
         """
         ...
+
+    async def delete(self, channel_id: str) -> bool:
+        """チャンネルを削除する
+
+        Args:
+            channel_id: 削除するチャンネルの ID
+
+        Returns:
+            削除が成功したかどうか（存在しなかった場合は False）
+        """
+        ...

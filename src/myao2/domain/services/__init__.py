@@ -1,6 +1,7 @@
 """Domain services."""
 
 from myao2.domain.services.channel_monitor import ChannelMonitor
+from myao2.domain.services.channel_sync import ChannelSyncService
 from myao2.domain.services.protocols import (
     ConversationHistoryService,
     MessagingService,
@@ -9,6 +10,7 @@ from myao2.domain.services.protocols import (
 
 __all__ = [
     "ChannelMonitor",
+    "ChannelSyncService",
     "ConversationHistoryService",
     "MessagingService",
     "ResponseGenerator",
