@@ -55,6 +55,7 @@ Phase 2 で設定済み：
 | 06 | 定期チェックループ | [06-periodic-check-loop.md](./06-periodic-check-loop.md) | 05 |
 | 07 | エントリポイント統合 | [07-entrypoint-integration.md](./07-entrypoint-integration.md) | 06 |
 | 08 | 統合テスト・動作確認 | [08-integration-test.md](./08-integration-test.md) | 07 |
+| extra01 | DBベースの履歴取得 | [extra01-db-based-history.md](./extra01-db-based-history.md) | 02, 03 |
 
 ---
 
@@ -154,6 +155,16 @@ main() で定期チェックループと Socket Mode を並行実行する。
 - 統合テストの設計
 - 手動検証手順
 - 動作確認チェックリスト
+
+### extra01: DBベースの履歴取得
+
+メッセージ履歴取得を Slack API ベースから DB ベースに変更する。
+
+- UserRepository, ChannelRepository Protocol の定義
+- SQLite 実装（SQLiteUserRepository, SQLiteChannelRepository）
+- DBConversationHistoryService, DBChannelMonitor 実装
+- SlackEventAdapter のユーザー/チャンネルキャッシュ対応
+- API 呼び出しの最小化によるパフォーマンス向上
 
 ---
 
