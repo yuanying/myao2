@@ -146,3 +146,41 @@ class TestFindById:
         found = await repository.find_by_id("nonexistent")
 
         assert found is None
+
+
+class TestDelete:
+    """delete method tests."""
+
+    async def test_delete_existing_channel(
+        self, repository: SQLiteChannelRepository
+    ) -> None:
+        """Test deleting an existing channel."""
+        channel = create_test_channel()
+        await repository.save(channel)
+
+        result = await repository.delete(channel.id)
+
+        assert result is True
+        assert await repository.find_by_id(channel.id) is None
+
+    async def test_delete_nonexistent_channel(
+        self, repository: SQLiteChannelRepository
+    ) -> None:
+        """Test deleting a nonexistent channel returns False."""
+        result = await repository.delete("nonexistent")
+
+        assert result is False
+
+    async def test_delete_does_not_affect_other_channels(
+        self, repository: SQLiteChannelRepository
+    ) -> None:
+        """Test deleting a channel does not affect other channels."""
+        channel1 = create_test_channel(id="C001", name="channel-one")
+        channel2 = create_test_channel(id="C002", name="channel-two")
+        await repository.save(channel1)
+        await repository.save(channel2)
+
+        await repository.delete("C001")
+
+        assert await repository.find_by_id("C001") is None
+        assert await repository.find_by_id("C002") is not None

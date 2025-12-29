@@ -2,13 +2,31 @@
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.infrastructure.persistence.models import JudgmentCacheModel
+
+
+def _normalize_to_utc(dt: datetime) -> datetime:
+    """Ensure datetime is UTC and timezone-aware.
+
+    SQLite stores datetimes without timezone info. This function:
+    - Adds UTC timezone to naive datetimes (treating them as UTC).
+    - Converts timezone-aware datetimes to UTC.
+
+    Args:
+        dt: datetime to process
+
+    Returns:
+        timezone-aware datetime in UTC
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 class SQLiteJudgmentCacheRepository:
@@ -156,9 +174,9 @@ class SQLiteJudgmentCacheRepository:
             confidence=model.confidence,
             reason=model.reason,
             latest_message_ts=model.latest_message_ts,
-            next_check_at=model.next_check_at,
-            created_at=model.created_at,
-            updated_at=model.updated_at,
+            next_check_at=_normalize_to_utc(model.next_check_at),
+            created_at=_normalize_to_utc(model.created_at),
+            updated_at=_normalize_to_utc(model.updated_at),
         )
 
     def _to_model(self, entity: JudgmentCache) -> JudgmentCacheModel:

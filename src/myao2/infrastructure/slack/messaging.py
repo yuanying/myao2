@@ -1,6 +1,18 @@
 """Slack messaging service."""
 
+from slack_sdk.errors import SlackApiError
 from slack_sdk.web.async_client import AsyncWebClient
+
+from myao2.domain.exceptions import ChannelNotAccessibleError
+
+# Error codes that indicate the channel is not accessible
+_CHANNEL_NOT_ACCESSIBLE_ERRORS = frozenset(
+    {
+        "not_in_channel",
+        "channel_not_found",
+        "is_archived",
+    }
+)
 
 
 class SlackMessagingService:
@@ -33,13 +45,28 @@ class SlackMessagingService:
             thread_ts: Thread timestamp for thread replies.
 
         Raises:
-            SlackApiError: If the API call fails.
+            ChannelNotAccessibleError: If the channel is not accessible
+                (not_in_channel, channel_not_found, is_archived).
+            SlackApiError: If the API call fails for other reasons.
         """
-        await self._client.chat_postMessage(
-            channel=channel_id,
-            text=text,
-            thread_ts=thread_ts,
-        )
+        try:
+            await self._client.chat_postMessage(
+                channel=channel_id,
+                text=text,
+                thread_ts=thread_ts,
+            )
+        except SlackApiError as e:
+            error_code = (
+                e.response.get("error", "") if isinstance(e.response, dict) else ""
+            )
+            if error_code in _CHANNEL_NOT_ACCESSIBLE_ERRORS:
+                message = (
+                    f"Cannot access channel {channel_id}: {error_code}"
+                    if error_code
+                    else f"Cannot access channel {channel_id}: {e!s}"
+                )
+                raise ChannelNotAccessibleError(channel_id, message) from e
+            raise
 
     async def get_bot_user_id(self) -> str:
         """Get the bot's user ID.

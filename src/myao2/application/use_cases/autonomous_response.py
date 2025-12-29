@@ -8,9 +8,11 @@ from myao2.config import Config, JudgmentSkipConfig
 from myao2.domain.entities import Channel, Context, Message, User
 from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
-from myao2.domain.repositories import MessageRepository
+from myao2.domain.exceptions import ChannelNotAccessibleError
+from myao2.domain.repositories import ChannelRepository, MessageRepository
 from myao2.domain.repositories.judgment_cache_repository import JudgmentCacheRepository
 from myao2.domain.services import (
+    ChannelSyncService,
     ConversationHistoryService,
     MessagingService,
     ResponseGenerator,
@@ -39,6 +41,8 @@ class AutonomousResponseUseCase:
         conversation_history_service: ConversationHistoryService,
         config: Config,
         bot_user_id: str,
+        channel_repository: ChannelRepository | None = None,
+        channel_sync_service: ChannelSyncService | None = None,
     ) -> None:
         """Initialize the use case.
 
@@ -52,6 +56,8 @@ class AutonomousResponseUseCase:
             conversation_history_service: Service for fetching conversation history.
             config: Application configuration.
             bot_user_id: The bot's user ID.
+            channel_repository: Repository for channel operations (optional).
+            channel_sync_service: Service for channel synchronization (optional).
         """
         self._channel_monitor = channel_monitor
         self._response_judgment = response_judgment
@@ -62,16 +68,23 @@ class AutonomousResponseUseCase:
         self._conversation_history_service = conversation_history_service
         self._config = config
         self._bot_user_id = bot_user_id
+        self._channel_repository = channel_repository
+        self._channel_sync_service = channel_sync_service
 
     async def execute(self) -> None:
         """Execute autonomous response.
 
         Processing flow:
-        1. Get all channels the bot is in
-        2. Check each channel for unreplied messages
-        3. For each unreplied message, perform response judgment
-        4. If should respond, generate and send response
+        1. Sync channels with cleanup (if enabled)
+        2. Get all channels the bot is in
+        3. Check each channel for unreplied messages
+        4. For each unreplied message, perform response judgment
+        5. If should respond, generate and send response
         """
+        # Sync channels before checking (removes stale channels)
+        if self._channel_sync_service is not None:
+            await self._channel_sync_service.sync_with_cleanup()
+
         channels = await self._channel_monitor.get_channels()
 
         for channel in channels:
@@ -172,11 +185,20 @@ class AutonomousResponseUseCase:
             channel.id,
             message.thread_ts,
         )
-        await self._messaging_service.send_message(
-            channel_id=channel.id,
-            text=response_text,
-            thread_ts=message.thread_ts,
-        )
+        try:
+            await self._messaging_service.send_message(
+                channel_id=channel.id,
+                text=response_text,
+                thread_ts=message.thread_ts,
+            )
+        except ChannelNotAccessibleError:
+            logger.warning(
+                "Channel %s is no longer accessible, removing from database",
+                channel.id,
+            )
+            if self._channel_repository is not None:
+                await self._channel_repository.delete(channel.id)
+            return
 
         # Save bot response message
         bot_message = self._create_bot_message(response_text, message)

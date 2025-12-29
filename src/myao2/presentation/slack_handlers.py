@@ -6,7 +6,7 @@ from typing import Any
 from slack_bolt.async_app import AsyncApp
 
 from myao2.application.use_cases import ReplyToMentionUseCase
-from myao2.domain.repositories import MessageRepository
+from myao2.domain.repositories import ChannelRepository, MessageRepository
 from myao2.infrastructure.slack import SlackEventAdapter
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ def register_handlers(
     event_adapter: SlackEventAdapter,
     bot_user_id: str,
     message_repository: MessageRepository,
+    channel_repository: ChannelRepository,
 ) -> None:
     """Register Slack event handlers.
 
@@ -43,6 +44,7 @@ def register_handlers(
         event_adapter: Adapter for converting events to entities.
         bot_user_id: The bot's user ID.
         message_repository: Repository for persisting messages.
+        channel_repository: Repository for channel information.
     """
 
     @app.event("app_mention")
@@ -73,7 +75,7 @@ def register_handlers(
             event.get("channel"),
         )
 
-        # Handle message_deleted
+        # Handle message_deleted (no channel membership check needed)
         if subtype == "message_deleted":
             try:
                 await message_repository.delete(
@@ -83,6 +85,19 @@ def register_handlers(
                 logger.debug("Deleted message: %s", event.get("deleted_ts"))
             except Exception:
                 logger.exception("Error deleting message")
+            return
+
+        # Check if bot is a member of this channel
+        channel_id = event.get("channel", "")
+        channel = await channel_repository.find_by_id(channel_id)
+        if channel is None:
+            logger.warning(
+                "Received message from channel %s that the bot is not recorded "
+                "as a member of. This may indicate an OAuth scope issue, "
+                "or a recent channel membership change not yet reflected in DB. "
+                "Please verify your Slack App's OAuth scopes.",
+                channel_id,
+            )
             return
 
         # Determine event data to process
@@ -123,3 +138,29 @@ def register_handlers(
             await reply_use_case.execute(message)
         except Exception:
             logger.exception("Error handling message event")
+
+    @app.event("member_left_channel")
+    async def handle_member_left_channel(event: dict) -> None:
+        """Handle member_left_channel events.
+
+        When the bot leaves a channel, remove it from the database.
+
+        Args:
+            event: Slack event payload.
+        """
+        user = event.get("user")
+        channel_id = event.get("channel")
+
+        # Only process if the bot itself left
+        if user != bot_user_id:
+            return
+
+        if channel_id is None:
+            logger.warning("member_left_channel event missing channel ID")
+            return
+
+        logger.info("Bot left channel %s, removing from database", channel_id)
+        try:
+            await channel_repository.delete(channel_id)
+        except Exception:
+            logger.exception("Error removing channel %s from database", channel_id)
