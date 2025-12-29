@@ -125,3 +125,31 @@ class TestDatabaseManager:
 
         constraint_names = [c["name"] for c in unique_constraints]
         assert "uq_message_channel" in constraint_names
+
+    async def test_close_disposes_engine(self, tmp_path: Path) -> None:
+        """Test that close disposes engine and clears references."""
+        db_path = tmp_path / "test.db"
+        manager = DatabaseManager(str(db_path))
+        await manager.create_tables()
+
+        # Engine should be initialized
+        assert manager._engine is not None
+        assert manager._session_factory is not None
+
+        await manager.close()
+
+        # After close, references should be cleared
+        assert manager._engine is None
+        assert manager._session_factory is None
+
+    async def test_close_without_engine(self) -> None:
+        """Test that close does nothing if engine was never created."""
+        manager = DatabaseManager(":memory:")
+
+        # Engine not created yet
+        assert manager._engine is None
+
+        # Should not raise
+        await manager.close()
+
+        assert manager._engine is None

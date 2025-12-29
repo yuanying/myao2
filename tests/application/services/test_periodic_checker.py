@@ -42,7 +42,7 @@ def long_interval_config() -> ResponseConfig:
 def checker(mock_usecase: Mock, config: ResponseConfig) -> PeriodicChecker:
     """Create PeriodicChecker instance."""
     return PeriodicChecker(
-        autonomous_response_usecase=mock_usecase,
+        autonomous_response_use_case=mock_usecase,
         config=config,
     )
 
@@ -154,7 +154,7 @@ class TestPeriodicCheckerStop:
     ) -> None:
         """Test that stop() during sleep interval exits immediately."""
         checker = PeriodicChecker(
-            autonomous_response_usecase=mock_usecase,
+            autonomous_response_use_case=mock_usecase,
             config=long_interval_config,
         )
 

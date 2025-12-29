@@ -69,6 +69,7 @@ class AutonomousResponseUseCase:
         channels = await self._channel_monitor.get_channels()
 
         for channel in channels:
+            logger.info("Checking channel %s for unreplied messages", channel.name)
             await self.check_channel(channel)
 
     async def check_channel(self, channel: Channel) -> None:
@@ -84,6 +85,11 @@ class AutonomousResponseUseCase:
 
         for message in unreplied_messages:
             try:
+                logger.info(
+                    "Processing unreplied message %s in channel %s",
+                    message.id,
+                    channel.id,
+                )
                 await self._process_message(channel, message)
             except Exception:
                 logger.exception(

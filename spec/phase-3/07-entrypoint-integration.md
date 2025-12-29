@@ -12,6 +12,7 @@ main() で定期チェックループと Socket Mode を並行実行するよう
 | ファイル | 説明 |
 |---------|------|
 | `src/myao2/__main__.py` | エントリポイント修正 |
+| `src/myao2/infrastructure/slack/channel_initializer.py` | 起動時チャンネル同期（新規） |
 
 ---
 
@@ -22,6 +23,7 @@ main() で定期チェックループと Socket Mode を並行実行するよう
 - タスク 03（ResponseJudgment）
 - タスク 05（AutonomousResponseUseCase）
 - タスク 06（PeriodicChecker）
+- extra01（DBConversationHistoryService）
 
 ---
 
@@ -82,18 +84,36 @@ async def main() -> None:
 
 ## 依存オブジェクトの初期化
 
+### 起動時チャンネル同期
+
+起動時に一度だけ Slack API でチャンネル一覧を取得し、DB に保存する。
+これにより、定期チェック時は DB からチャンネル情報を取得でき、
+Slack API 呼び出しを最小限に抑える。
+
+```python
+# 起動時チャンネル同期
+channel_initializer = SlackChannelInitializer(
+    client=app.client,
+    channel_repository=channel_repository,
+)
+await channel_initializer.sync_channels()
+```
+
 ### 新規追加するオブジェクト
 
 ```python
-# ChannelMonitor
-channel_monitor = SlackChannelMonitor(
-    client=slack_client,
+# ChannelMonitor（DB ベース実装を使用）
+# Slack API を呼び出さず、DB からデータを取得する
+channel_monitor = DBChannelMonitor(
+    message_repository=message_repository,
+    channel_repository=channel_repository,
+    bot_user_id=bot_user_id,
 )
 
 # ResponseJudgment
-response_judgment = LLMResponseJudgment(
-    llm_config=config.llm.get("judgment", config.llm["default"]),
-)
+judgment_llm_config = config.llm.get("judgment", config.llm["default"])
+judgment_llm_client = LLMClient(judgment_llm_config)
+response_judgment = LLMResponseJudgment(client=judgment_llm_client)
 
 # AutonomousResponseUseCase
 autonomous_response_usecase = AutonomousResponseUseCase(
@@ -104,6 +124,7 @@ autonomous_response_usecase = AutonomousResponseUseCase(
     message_repository=message_repository,
     conversation_history_service=conversation_history_service,
     config=config,
+    bot_user_id=bot_user_id,
 )
 
 # PeriodicChecker
@@ -194,15 +215,21 @@ async def main() -> None:
 
 ### 設定による制御
 
-- config.response.enabled=False で定期チェックを無効化可能
-- メンション応答のみの動作も可能
+- メンション応答のみの動作も可能（将来の拡張）
+
+### Slack API 呼び出しの最小化
+
+- 起動時のみ `users_conversations()` を呼び出し
+- 定期チェック時は DB からデータを取得
+- メッセージ履歴も DB から取得（DBConversationHistoryService 使用）
 
 ---
 
 ## 完了基準
 
-- [ ] __main__.py が修正されている
-- [ ] Socket Mode と定期チェックが並行実行される
-- [ ] Ctrl+C でグレースフルに終了する
-- [ ] response.enabled=False で定期チェックが無効化される
-- [ ] 起動時のログに両コンポーネントの開始が記録される
+- [x] __main__.py が修正されている
+- [x] Socket Mode と定期チェックが並行実行される
+- [x] Ctrl+C でグレースフルに終了する
+- [x] 起動時のログに両コンポーネントの開始が記録される
+- [x] 起動時にチャンネル情報を DB に同期する
+- [x] 定期チェック時は DB からデータを取得する（Slack API 呼び出し最小化）

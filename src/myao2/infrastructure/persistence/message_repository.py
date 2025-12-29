@@ -179,6 +179,24 @@ class SQLiteMessageRepository:
                 return None
             return self._to_entity(model)
 
+    async def delete(self, message_id: str, channel_id: str) -> None:
+        """Delete a message.
+
+        Args:
+            message_id: Message ID (Slack ts)
+            channel_id: Channel ID
+        """
+        async with self._session_factory() as session:
+            statement = select(MessageModel).where(
+                MessageModel.message_id == message_id,
+                MessageModel.channel_id == channel_id,
+            )
+            result = await session.exec(statement)
+            model = result.first()
+            if model:
+                await session.delete(model)
+                await session.commit()
+
     def _to_entity(self, model: MessageModel) -> Message:
         """モデルをエンティティに変換する
 

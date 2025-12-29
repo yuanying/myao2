@@ -500,3 +500,55 @@ class TestConversion:
             assert model.mentions == '["U111", "U222"]'
             # Verify it's valid JSON
             assert json.loads(model.mentions) == ["U111", "U222"]
+
+
+class TestDelete:
+    """delete method tests."""
+
+    async def test_delete_existing_message(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test deleting an existing message."""
+        message = create_test_message()
+        await repository.save(message)
+
+        await repository.delete(message.id, message.channel.id)
+
+        found = await repository.find_by_id(message.id, message.channel.id)
+        assert found is None
+
+    async def test_delete_nonexistent_message(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test deleting a nonexistent message does not raise error."""
+        # Should not raise
+        await repository.delete("nonexistent", "C123456")
+
+    async def test_delete_wrong_channel(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test that delete with wrong channel does not delete message."""
+        message = create_test_message(channel_id="C111111")
+        await repository.save(message)
+
+        # Try to delete with wrong channel
+        await repository.delete(message.id, "C999999")
+
+        # Message should still exist
+        found = await repository.find_by_id(message.id, "C111111")
+        assert found is not None
+
+    async def test_delete_only_specific_message(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test that delete only removes the specific message."""
+        msg1 = create_test_message(id="1.001")
+        msg2 = create_test_message(id="1.002")
+        await repository.save(msg1)
+        await repository.save(msg2)
+
+        await repository.delete("1.001", "C123456")
+
+        # Only msg1 should be deleted
+        assert await repository.find_by_id("1.001", "C123456") is None
+        assert await repository.find_by_id("1.002", "C123456") is not None

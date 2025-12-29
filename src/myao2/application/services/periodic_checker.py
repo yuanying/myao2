@@ -18,16 +18,16 @@ class PeriodicChecker:
 
     def __init__(
         self,
-        autonomous_response_usecase: AutonomousResponseUseCase,
+        autonomous_response_use_case: AutonomousResponseUseCase,
         config: ResponseConfig,
     ) -> None:
         """Initialize PeriodicChecker.
 
         Args:
-            autonomous_response_usecase: Use case to execute periodically.
+            autonomous_response_use_case: Use case to execute periodically.
             config: Response configuration with check interval.
         """
-        self._usecase = autonomous_response_usecase
+        self._usecase = autonomous_response_use_case
         self._config = config
         # _stop_event uses inverted logic:
         # - set() means "stop signal active" (not running)
@@ -51,6 +51,7 @@ class PeriodicChecker:
         self._stop_event.clear()
 
         while not self._stop_event.is_set():
+            logger.info("Starting periodic check")
             try:
                 await self._usecase.execute()
             except Exception as e:
