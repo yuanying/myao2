@@ -114,17 +114,21 @@ class SlackChannelMonitor:
         self,
         channel_id: str,
         min_wait_seconds: int,
+        max_message_age_seconds: int | None = None,
     ) -> list[Message]:
         """Get unreplied messages from a channel.
 
         Finds messages that:
         - Are older than min_wait_seconds
+        - Are not older than max_message_age_seconds (if specified)
         - Are not from the bot itself
         - Have not been replied to by the bot
 
         Args:
             channel_id: Channel ID.
             min_wait_seconds: Minimum wait time in seconds.
+            max_message_age_seconds: Maximum message age in seconds.
+                Messages older than this are excluded. None means no limit.
 
         Returns:
             List of unreplied messages.
@@ -141,6 +145,11 @@ class SlackChannelMonitor:
 
             now = datetime.now(timezone.utc)
             cutoff_time = now.timestamp() - min_wait_seconds
+            oldest_time = (
+                now.timestamp() - max_message_age_seconds
+                if max_message_age_seconds
+                else 0
+            )
 
             # Convert all messages and build context
             all_messages: list[Message] = []
@@ -163,9 +172,14 @@ class SlackChannelMonitor:
                 if msg.user.id == self._bot_user_id:
                     continue
 
-                # Skip if too recent
                 msg_ts = msg.timestamp.timestamp()
+
+                # Skip if too recent
                 if msg_ts > cutoff_time:
+                    continue
+
+                # Skip if too old
+                if max_message_age_seconds and msg_ts < oldest_time:
                     continue
 
                 # Check if bot replied after this message

@@ -197,6 +197,52 @@ class SQLiteMessageRepository:
                 await session.delete(model)
                 await session.commit()
 
+    async def find_all_in_channel(
+        self,
+        channel_id: str,
+        limit: int = 50,
+        min_timestamp: datetime | None = None,
+        max_timestamp: datetime | None = None,
+        exclude_bot_user_id: str | None = None,
+    ) -> list[Message]:
+        """チャンネルの全メッセージを取得する（スレッド内メッセージを含む）
+
+        Args:
+            channel_id: チャンネル ID
+            limit: 取得する最大件数
+            min_timestamp: この時刻より後のメッセージを取得
+            max_timestamp: この時刻以前のメッセージを取得
+            exclude_bot_user_id: 除外するボットのユーザー ID
+
+        Returns:
+            メッセージリスト（新しい順）
+        """
+        async with self._session_factory() as session:
+            conditions = [MessageModel.channel_id == channel_id]
+
+            if min_timestamp is not None:
+                conditions.append(
+                    MessageModel.timestamp > min_timestamp  # type: ignore[union-attr]
+                )
+
+            if max_timestamp is not None:
+                conditions.append(
+                    MessageModel.timestamp <= max_timestamp  # type: ignore[union-attr]
+                )
+
+            if exclude_bot_user_id is not None:
+                conditions.append(MessageModel.user_id != exclude_bot_user_id)
+
+            statement = (
+                select(MessageModel)
+                .where(*conditions)
+                .order_by(MessageModel.timestamp.desc())  # type: ignore[union-attr]
+                .limit(limit)
+            )
+            result = await session.exec(statement)
+            models = result.all()
+            return [self._to_entity(m) for m in models]
+
     def _to_entity(self, model: MessageModel) -> Message:
         """モデルをエンティティに変換する
 

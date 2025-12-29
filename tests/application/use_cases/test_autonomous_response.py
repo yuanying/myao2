@@ -172,6 +172,7 @@ class TestAutonomousResponseUseCaseExecute:
         mock_channel_monitor.get_unreplied_messages.assert_awaited_once_with(
             channel_id=channel.id,
             min_wait_seconds=300,
+            max_message_age_seconds=43200,
         )
         mock_response_judgment.judge.assert_not_awaited()
         mock_messaging_service.send_message.assert_not_awaited()

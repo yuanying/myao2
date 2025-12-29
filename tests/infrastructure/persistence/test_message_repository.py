@@ -502,6 +502,113 @@ class TestConversion:
             assert json.loads(model.mentions) == ["U111", "U222"]
 
 
+class TestFindAllInChannel:
+    """find_all_in_channel method tests."""
+
+    async def test_find_all_includes_thread_messages(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test that thread messages are included."""
+        base_time = datetime.now(timezone.utc)
+        # Thread parent message
+        parent_msg = create_test_message(
+            id="1.000", timestamp=base_time, thread_ts=None
+        )
+        # Thread reply messages
+        thread_msg1 = create_test_message(
+            id="1.001", timestamp=base_time + timedelta(minutes=1), thread_ts="1.000"
+        )
+        thread_msg2 = create_test_message(
+            id="1.002", timestamp=base_time + timedelta(minutes=2), thread_ts="1.000"
+        )
+
+        await repository.save(parent_msg)
+        await repository.save(thread_msg1)
+        await repository.save(thread_msg2)
+
+        result = await repository.find_all_in_channel("C123456")
+
+        assert len(result) == 3
+        # Newest first
+        assert result[0].id == "1.002"
+        assert result[1].id == "1.001"
+        assert result[2].id == "1.000"
+
+    async def test_find_all_with_time_range(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test time range filtering."""
+        base_time = datetime.now(timezone.utc)
+        messages = [
+            create_test_message(
+                id=f"1.{i:03d}",
+                timestamp=base_time + timedelta(minutes=i * 10),
+            )
+            for i in range(5)  # 0, 10, 20, 30, 40 minutes
+        ]
+        for msg in messages:
+            await repository.save(msg)
+
+        # Get messages between minute 15 and minute 35
+        min_ts = base_time + timedelta(minutes=15)
+        max_ts = base_time + timedelta(minutes=35)
+        result = await repository.find_all_in_channel(
+            "C123456", min_timestamp=min_ts, max_timestamp=max_ts
+        )
+
+        # Should get messages at minute 20 and 30
+        assert len(result) == 2
+        assert result[0].id == "1.003"  # minute 30
+        assert result[1].id == "1.002"  # minute 20
+
+    async def test_find_all_excludes_bot_messages(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test that bot messages are excluded when bot_user_id is specified."""
+        base_time = datetime.now(timezone.utc)
+        user_msg = create_test_message(
+            id="1.001",
+            user_id="U111",
+            is_bot=False,
+            timestamp=base_time,
+        )
+        bot_msg = create_test_message(
+            id="1.002",
+            user_id="BOTUSER",
+            is_bot=True,
+            timestamp=base_time + timedelta(minutes=1),
+        )
+
+        await repository.save(user_msg)
+        await repository.save(bot_msg)
+
+        result = await repository.find_all_in_channel(
+            "C123456", exclude_bot_user_id="BOTUSER"
+        )
+
+        assert len(result) == 1
+        assert result[0].id == "1.001"
+
+    async def test_find_all_with_limit(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test limit parameter."""
+        for i in range(10):
+            await repository.save(create_test_message(id=f"1.{i:03d}"))
+
+        result = await repository.find_all_in_channel("C123456", limit=3)
+
+        assert len(result) == 3
+
+    async def test_find_all_empty_channel(
+        self, repository: SQLiteMessageRepository
+    ) -> None:
+        """Test finding in empty channel."""
+        result = await repository.find_all_in_channel("C999999")
+
+        assert result == []
+
+
 class TestDelete:
     """delete method tests."""
 
