@@ -70,3 +70,23 @@ class JudgmentCacheModel(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("channel_id", "thread_ts", name="uq_channel_thread"),
     )
+
+
+class MemoryModel(SQLModel, table=True):
+    """記憶の永続化モデル"""
+
+    __tablename__ = "memories"
+
+    id: int | None = Field(default=None, primary_key=True)
+    scope: str = Field(index=True)
+    scope_id: str = Field(index=True)
+    memory_type: str = Field(index=True)
+    content: str
+    created_at: datetime
+    updated_at: datetime
+    source_message_count: int
+    source_latest_message_ts: str | None = None
+
+    __table_args__ = (
+        UniqueConstraint("scope", "scope_id", "memory_type", name="uq_scope_type"),
+    )
