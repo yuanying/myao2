@@ -328,8 +328,9 @@ class TestGetUnrepliedMessages:
 
         result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
 
-        # Thread reply should be included
-        assert len(result) == 2
+        # Thread's latest message (thread reply) should be included
+        # Parent message is grouped with thread, so only latest is returned
+        assert len(result) == 1
         result_ids = {m.id for m in result}
         assert "1.001" in result_ids
 
@@ -467,3 +468,34 @@ class TestGetUnrepliedMessages:
         # Channel message should still be unreplied
         result_ids = {m.id for m in result}
         assert "1.001" in result_ids
+
+    async def test_get_unreplied_messages_thread_parent_replied_by_bot(
+        self,
+        monitor: DBChannelMonitor,
+        message_repository: SQLiteMessageRepository,
+    ) -> None:
+        """Test that thread parent is marked as replied when bot replies in thread."""
+        now = datetime.now(timezone.utc)
+        # Thread parent message (no thread_ts, but its id is used as thread_ts)
+        thread_parent = create_test_message(
+            id="1.000",
+            user_id="U111",
+            timestamp=now - timedelta(minutes=30),
+            thread_ts=None,
+        )
+        # Bot reply in thread
+        bot_thread_reply = create_test_message(
+            id="1.001",
+            user_id="BOTUSER",
+            is_bot=True,
+            timestamp=now - timedelta(minutes=10),
+            thread_ts="1.000",
+        )
+        await message_repository.save(thread_parent)
+        await message_repository.save(bot_thread_reply)
+
+        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+
+        # Thread parent should NOT be in unreplied (bot replied in thread)
+        result_ids = {m.id for m in result}
+        assert "1.000" not in result_ids

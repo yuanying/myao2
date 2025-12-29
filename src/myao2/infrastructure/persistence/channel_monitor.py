@@ -104,12 +104,26 @@ class DBChannelMonitor:
         thread_messages: dict[str, list[Message]] = {}
         channel_messages: list[Message] = []
 
+        # 第1パス: thread_ts のセットを収集
+        thread_ts_set: set[str] = set()
         for msg in all_messages:
             if msg.thread_ts:
+                thread_ts_set.add(msg.thread_ts)
+
+        # 第2パス: メッセージを分類
+        for msg in all_messages:
+            if msg.thread_ts:
+                # スレッド返信
                 if msg.thread_ts not in thread_messages:
                     thread_messages[msg.thread_ts] = []
                 thread_messages[msg.thread_ts].append(msg)
+            elif msg.id in thread_ts_set:
+                # スレッド親（自身の id が thread_ts として参照されている）
+                if msg.id not in thread_messages:
+                    thread_messages[msg.id] = []
+                thread_messages[msg.id].append(msg)
             else:
+                # 純粋なトップレベルメッセージ
                 channel_messages.append(msg)
 
         unreplied_messages: list[Message] = []
