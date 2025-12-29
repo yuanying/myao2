@@ -165,6 +165,14 @@ def load_config(path: str | Path) -> Config:
         long_term_update_interval_seconds=memory_data.get(
             "long_term_update_interval_seconds", 3600
         ),
+        short_term_window_hours=memory_data.get("short_term_window_hours", 24),
+        long_term_summary_max_tokens=memory_data.get(
+            "long_term_summary_max_tokens", 500
+        ),
+        short_term_summary_max_tokens=memory_data.get(
+            "short_term_summary_max_tokens", 300
+        ),
+        memory_generation_llm=memory_data.get("memory_generation_llm", "default"),
     )
 
     # ResponseConfig (optional, defaults used if not present)
