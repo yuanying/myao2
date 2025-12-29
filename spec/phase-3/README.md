@@ -56,6 +56,7 @@ Phase 2 で設定済み：
 | 07 | エントリポイント統合 | [07-entrypoint-integration.md](./07-entrypoint-integration.md) | 06 |
 | 08 | 統合テスト・動作確認 | [08-integration-test.md](./08-integration-test.md) | 07 |
 | extra01 | DBベースの履歴取得 | [extra01-db-based-history.md](./extra01-db-based-history.md) | 02, 03 |
+| extra02 | 応答判定スキップ | [extra02-judgment-skip.md](./extra02-judgment-skip.md) | 03, 05, extra01 |
 
 ---
 
@@ -165,6 +166,17 @@ main() で定期チェックループと Socket Mode を並行実行する。
 - DBConversationHistoryService, DBChannelMonitor 実装
 - SlackEventAdapter のユーザー/チャンネルキャッシュ対応
 - API 呼び出しの最小化によるパフォーマンス向上
+
+### extra02: 応答判定スキップ
+
+LLM への応答判定リクエストを削減するため、confidence 値に基づくスキップ機能を追加する。
+
+- JudgmentSkipConfig / JudgmentSkipThreshold 設定クラスの定義
+- JudgmentCache エンティティ（スレッド/トップレベル単位）
+- JudgmentCacheRepository Protocol と SQLite 実装
+- LLMResponseJudgment の confidence 取得対応
+- AutonomousResponseUseCase でのスキップ判定・キャッシュ更新
+- 設定可能な閾値（confidence >= 0.9 なら12時間スキップなど）
 
 ---
 
