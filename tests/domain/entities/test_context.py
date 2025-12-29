@@ -153,6 +153,79 @@ class TestContextImmutability:
         with pytest.raises(AttributeError):
             context.other_channel_messages = {}  # type: ignore[misc]
 
+    def test_cannot_modify_memory_fields(self, persona_config: PersonaConfig) -> None:
+        """Test that memory fields cannot be modified."""
+        context = Context(
+            persona=persona_config,
+            workspace_long_term_memory="test",
+        )
+
+        with pytest.raises(AttributeError):
+            context.workspace_long_term_memory = "new"  # type: ignore[misc]
+
+        with pytest.raises(AttributeError):
+            context.workspace_short_term_memory = "new"  # type: ignore[misc]
+
+        with pytest.raises(AttributeError):
+            context.channel_long_term_memory = "new"  # type: ignore[misc]
+
+        with pytest.raises(AttributeError):
+            context.channel_short_term_memory = "new"  # type: ignore[misc]
+
+        with pytest.raises(AttributeError):
+            context.thread_memory = "new"  # type: ignore[misc]
+
+
+class TestContextMemoryFields:
+    """Tests for Context memory fields."""
+
+    def test_context_without_memory_fields(self, persona_config: PersonaConfig) -> None:
+        """Test that Context without memory fields has all None values."""
+        context = Context(persona=persona_config)
+
+        assert context.workspace_long_term_memory is None
+        assert context.workspace_short_term_memory is None
+        assert context.channel_long_term_memory is None
+        assert context.channel_short_term_memory is None
+        assert context.thread_memory is None
+
+    def test_context_with_all_memory_fields(
+        self, persona_config: PersonaConfig
+    ) -> None:
+        """Test that Context can be created with all memory fields."""
+        context = Context(
+            persona=persona_config,
+            workspace_long_term_memory="ワークスペースの歴史...",
+            workspace_short_term_memory="直近のワークスペースでの出来事...",
+            channel_long_term_memory="チャンネルの歴史...",
+            channel_short_term_memory="直近のチャンネルでの出来事...",
+            thread_memory="スレッドの要約...",
+        )
+
+        assert context.workspace_long_term_memory == "ワークスペースの歴史..."
+        assert (
+            context.workspace_short_term_memory == "直近のワークスペースでの出来事..."
+        )
+        assert context.channel_long_term_memory == "チャンネルの歴史..."
+        assert context.channel_short_term_memory == "直近のチャンネルでの出来事..."
+        assert context.thread_memory == "スレッドの要約..."
+
+    def test_context_with_partial_memory_fields(
+        self, persona_config: PersonaConfig
+    ) -> None:
+        """Test that Context can be created with partial memory fields."""
+        context = Context(
+            persona=persona_config,
+            workspace_long_term_memory="ワークスペースの歴史...",
+            thread_memory="スレッドの要約...",
+        )
+
+        assert context.workspace_long_term_memory == "ワークスペースの歴史..."
+        assert context.workspace_short_term_memory is None
+        assert context.channel_long_term_memory is None
+        assert context.channel_short_term_memory is None
+        assert context.thread_memory == "スレッドの要約..."
+
 
 class TestOtherChannelMessages:
     """Tests for other_channel_messages field."""
