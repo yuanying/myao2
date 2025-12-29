@@ -482,12 +482,12 @@ PeriodicChecker
 
 ## 完了基準
 
-- [ ] JudgmentSkipConfig / JudgmentSkipThreshold が定義されている
-- [ ] JudgmentCache エンティティが定義されている
-- [ ] JudgmentCacheRepository Protocol が定義されている
-- [ ] JudgmentCacheModel が定義されている
-- [ ] SQLiteJudgmentCacheRepository が実装されている
-- [ ] LLMResponseJudgment が confidence を取得している
-- [ ] AutonomousResponseUseCase がスキップ判定を行っている
-- [ ] config.yaml に judgment_skip 設定が追加されている
-- [ ] 全テストケースが通過する
+- [x] JudgmentSkipConfig / JudgmentSkipThreshold が定義されている
+- [x] JudgmentCache エンティティが定義されている
+- [x] JudgmentCacheRepository Protocol が定義されている
+- [x] JudgmentCacheModel が定義されている
+- [x] SQLiteJudgmentCacheRepository が実装されている
+- [x] LLMResponseJudgment が confidence を取得している
+- [x] AutonomousResponseUseCase がスキップ判定を行っている
+- [x] config.yaml に judgment_skip 設定が追加されている
+- [x] 全テストケースが通過する

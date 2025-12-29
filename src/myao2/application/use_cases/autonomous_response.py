@@ -2,11 +2,14 @@
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from myao2.config import Config
+from myao2.config import Config, JudgmentSkipConfig
 from myao2.domain.entities import Channel, Context, Message, User
+from myao2.domain.entities.judgment_cache import JudgmentCache
+from myao2.domain.entities.judgment_result import JudgmentResult
 from myao2.domain.repositories import MessageRepository
+from myao2.domain.repositories.judgment_cache_repository import JudgmentCacheRepository
 from myao2.domain.services import (
     ConversationHistoryService,
     MessagingService,
@@ -32,6 +35,7 @@ class AutonomousResponseUseCase:
         response_generator: ResponseGenerator,
         messaging_service: MessagingService,
         message_repository: MessageRepository,
+        judgment_cache_repository: JudgmentCacheRepository,
         conversation_history_service: ConversationHistoryService,
         config: Config,
         bot_user_id: str,
@@ -44,6 +48,7 @@ class AutonomousResponseUseCase:
             response_generator: Service for generating responses.
             messaging_service: Service for sending messages.
             message_repository: Repository for storing messages.
+            judgment_cache_repository: Repository for judgment cache.
             conversation_history_service: Service for fetching conversation history.
             config: Application configuration.
             bot_user_id: The bot's user ID.
@@ -53,6 +58,7 @@ class AutonomousResponseUseCase:
         self._response_generator = response_generator
         self._messaging_service = messaging_service
         self._message_repository = message_repository
+        self._judgment_cache_repository = judgment_cache_repository
         self._conversation_history_service = conversation_history_service
         self._config = config
         self._bot_user_id = bot_user_id
@@ -106,6 +112,14 @@ class AutonomousResponseUseCase:
             channel: The channel containing the message.
             message: The message to process.
         """
+        # Check if we should skip judgment
+        if await self._should_skip_judgment(message):
+            logger.info(
+                "Skipping judgment for message %s (cache valid)",
+                message.id,
+            )
+            return
+
         # Get conversation history
         conversation_history = await self._get_conversation_history(message)
 
@@ -129,6 +143,9 @@ class AutonomousResponseUseCase:
             judgment_result.reason,
             judgment_result.confidence,
         )
+
+        # Cache judgment result
+        await self._cache_judgment_result(message, judgment_result)
 
         if not judgment_result.should_respond:
             return
@@ -254,3 +271,87 @@ class AutonomousResponseUseCase:
             thread_ts=original_message.thread_ts,
             mentions=[],
         )
+
+    async def _should_skip_judgment(self, message: Message) -> bool:
+        """Check if judgment should be skipped based on cache.
+
+        Args:
+            message: The message to check.
+
+        Returns:
+            True if judgment should be skipped, False otherwise.
+        """
+        skip_config = self._config.response.judgment_skip
+        if skip_config is None or not skip_config.enabled:
+            return False
+
+        cache = await self._judgment_cache_repository.find_by_scope(
+            channel_id=message.channel.id,
+            thread_ts=message.thread_ts,
+        )
+
+        if cache is None:
+            return False
+
+        current_time = datetime.now(timezone.utc)
+        # message.id is the latest message timestamp
+        return cache.is_valid(current_time, message.id)
+
+    async def _cache_judgment_result(
+        self,
+        message: Message,
+        result: JudgmentResult,
+    ) -> None:
+        """Cache judgment result.
+
+        Args:
+            message: The message that was judged.
+            result: The judgment result.
+        """
+        skip_config = self._config.response.judgment_skip
+        if skip_config is None or not skip_config.enabled:
+            return
+
+        current_time = datetime.now(timezone.utc)
+        skip_seconds = self._calculate_skip_seconds(result.confidence, skip_config)
+        next_check_at = current_time + timedelta(seconds=skip_seconds)
+
+        cache = JudgmentCache(
+            channel_id=message.channel.id,
+            thread_ts=message.thread_ts,
+            should_respond=result.should_respond,
+            confidence=result.confidence,
+            reason=result.reason,
+            latest_message_ts=message.id,
+            next_check_at=next_check_at,
+            created_at=current_time,
+            updated_at=current_time,
+        )
+
+        await self._judgment_cache_repository.save(cache)
+
+    def _calculate_skip_seconds(
+        self,
+        confidence: float,
+        config: JudgmentSkipConfig,
+    ) -> int:
+        """Calculate skip seconds based on confidence.
+
+        Args:
+            confidence: The confidence value (0.0-1.0).
+            config: The judgment skip configuration.
+
+        Returns:
+            Number of seconds to skip.
+        """
+        sorted_thresholds = sorted(
+            config.thresholds,
+            key=lambda t: t.min_confidence,
+            reverse=True,
+        )
+
+        for threshold in sorted_thresholds:
+            if confidence >= threshold.min_confidence:
+                return threshold.skip_seconds
+
+        return config.default_skip_seconds

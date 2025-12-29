@@ -345,6 +345,93 @@ class TestLLMResponseJudgmentPrompt:
         assert "testuser" in user_message["content"]
 
 
+class TestLLMResponseJudgmentConfidence:
+    """Confidence parsing tests for LLMResponseJudgment."""
+
+    async def test_confidence_parsed_from_response(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        sample_context: Context,
+        target_message: Message,
+    ) -> None:
+        """Test that confidence is correctly parsed from response."""
+        response = (
+            '{"should_respond": true, "reason": "Help needed", "confidence": 0.85}'
+        )
+        mock_client.complete = AsyncMock(return_value=response)
+
+        result = await judgment.judge(sample_context, target_message)
+
+        assert result.should_respond is True
+        assert result.reason == "Help needed"
+        assert result.confidence == 0.85
+
+    async def test_confidence_defaults_to_1_0_when_missing(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        sample_context: Context,
+        target_message: Message,
+    ) -> None:
+        """Test that confidence defaults to 1.0 when not provided."""
+        mock_client.complete = AsyncMock(
+            return_value='{"should_respond": false, "reason": "Not interesting"}'
+        )
+
+        result = await judgment.judge(sample_context, target_message)
+
+        assert result.should_respond is False
+        assert result.confidence == 1.0
+
+    async def test_confidence_clamped_to_max_1_0(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        sample_context: Context,
+        target_message: Message,
+    ) -> None:
+        """Test that confidence > 1.0 is clamped to 1.0."""
+        response = '{"should_respond": true, "reason": "Very sure", "confidence": 1.5}'
+        mock_client.complete = AsyncMock(return_value=response)
+
+        result = await judgment.judge(sample_context, target_message)
+
+        assert result.confidence == 1.0
+
+    async def test_confidence_clamped_to_min_0_0(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        sample_context: Context,
+        target_message: Message,
+    ) -> None:
+        """Test that confidence < 0.0 is clamped to 0.0."""
+        response = (
+            '{"should_respond": false, "reason": "Uncertain", "confidence": -0.5}'
+        )
+        mock_client.complete = AsyncMock(return_value=response)
+
+        result = await judgment.judge(sample_context, target_message)
+
+        assert result.confidence == 0.0
+
+    async def test_confidence_0_0_on_parse_failure(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        sample_context: Context,
+        target_message: Message,
+    ) -> None:
+        """Test that confidence is 0.0 when parsing fails."""
+        mock_client.complete = AsyncMock(return_value="not valid json at all")
+
+        result = await judgment.judge(sample_context, target_message)
+
+        assert result.should_respond is False
+        assert result.confidence == 0.0
+
+
 class TestLLMResponseJudgmentMultipleMessages:
     """Tests with multiple messages in conversation."""
 

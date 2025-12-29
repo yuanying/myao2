@@ -1,6 +1,6 @@
 """設定データクラス"""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -47,6 +47,39 @@ class LoggingConfig:
 
 
 @dataclass
+class JudgmentSkipThreshold:
+    """判定スキップ閾値設定
+
+    Attributes:
+        min_confidence: 最小 confidence（この値以上で適用）
+        skip_seconds: スキップする秒数
+    """
+
+    min_confidence: float
+    skip_seconds: int
+
+
+@dataclass
+class JudgmentSkipConfig:
+    """応答判定スキップ設定
+
+    Attributes:
+        enabled: スキップ機能有効/無効
+        thresholds: confidence 閾値リスト（高い順にソート推奨）
+        default_skip_seconds: どの閾値にも該当しない場合のスキップ秒数
+    """
+
+    enabled: bool = True
+    thresholds: list[JudgmentSkipThreshold] = field(
+        default_factory=lambda: [
+            JudgmentSkipThreshold(min_confidence=0.9, skip_seconds=43200),  # 12時間
+            JudgmentSkipThreshold(min_confidence=0.7, skip_seconds=3600),  # 1時間
+        ]
+    )
+    default_skip_seconds: int = 600  # 10分
+
+
+@dataclass
 class ResponseConfig:
     """自律応答設定"""
 
@@ -54,6 +87,7 @@ class ResponseConfig:
     min_wait_seconds: int = 300
     message_limit: int = 20
     max_message_age_seconds: int = 43200  # 12 hours
+    judgment_skip: JudgmentSkipConfig | None = None
 
 
 @dataclass

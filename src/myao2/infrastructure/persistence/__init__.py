@@ -12,11 +12,15 @@ from myao2.infrastructure.persistence.exceptions import (
     DatabaseError,
     PersistenceError,
 )
+from myao2.infrastructure.persistence.judgment_cache_repository import (
+    SQLiteJudgmentCacheRepository,
+)
 from myao2.infrastructure.persistence.message_repository import (
     SQLiteMessageRepository,
 )
 from myao2.infrastructure.persistence.models import (
     ChannelModel,
+    JudgmentCacheModel,
     MessageModel,
     UserModel,
 )
@@ -28,9 +32,11 @@ __all__ = [
     "DatabaseManager",
     "DBChannelMonitor",
     "DBConversationHistoryService",
+    "JudgmentCacheModel",
     "MessageModel",
     "PersistenceError",
     "SQLiteChannelRepository",
+    "SQLiteJudgmentCacheRepository",
     "SQLiteMessageRepository",
     "SQLiteUserRepository",
     "UserModel",

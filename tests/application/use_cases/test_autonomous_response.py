@@ -1,7 +1,7 @@
 """Tests for AutonomousResponseUseCase."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -9,6 +9,8 @@ import pytest
 from myao2.application.use_cases.autonomous_response import AutonomousResponseUseCase
 from myao2.config import (
     Config,
+    JudgmentSkipConfig,
+    JudgmentSkipThreshold,
     LLMConfig,
     MemoryConfig,
     PersonaConfig,
@@ -16,6 +18,7 @@ from myao2.config import (
     SlackConfig,
 )
 from myao2.domain.entities import Channel, Context, Message, User
+from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
 
 
@@ -72,6 +75,17 @@ def mock_message_repository() -> Mock:
 
 
 @pytest.fixture
+def mock_judgment_cache_repository() -> Mock:
+    """Create mock judgment cache repository."""
+    repo = Mock()
+    repo.save = AsyncMock()
+    repo.find_by_scope = AsyncMock(return_value=None)
+    repo.delete_by_scope = AsyncMock()
+    repo.delete_expired = AsyncMock(return_value=0)
+    return repo
+
+
+@pytest.fixture
 def mock_conversation_history_service() -> Mock:
     """Create mock conversation history service."""
     service = Mock()
@@ -103,6 +117,7 @@ def use_case(
     mock_response_generator: Mock,
     mock_messaging_service: Mock,
     mock_message_repository: Mock,
+    mock_judgment_cache_repository: Mock,
     mock_conversation_history_service: Mock,
     config: Config,
     bot_user_id: str,
@@ -114,6 +129,7 @@ def use_case(
         response_generator=mock_response_generator,
         messaging_service=mock_messaging_service,
         message_repository=mock_message_repository,
+        judgment_cache_repository=mock_judgment_cache_repository,
         conversation_history_service=mock_conversation_history_service,
         config=config,
         bot_user_id=bot_user_id,
@@ -671,3 +687,415 @@ class TestAutonomousResponseUseCaseLogging:
             or "response" in caplog.text.lower()
         )
         assert has_response_log
+
+
+class TestAutonomousResponseUseCaseJudgmentSkip:
+    """Tests for judgment skip functionality."""
+
+    @pytest.fixture
+    def config_with_skip(self) -> Config:
+        """Create test config with judgment skip enabled."""
+        return Config(
+            slack=SlackConfig(bot_token="xoxb-test", app_token="xapp-test"),
+            llm={"default": LLMConfig(model="gpt-4")},
+            persona=PersonaConfig(
+                name="TestBot", system_prompt="You are a friendly bot."
+            ),
+            memory=MemoryConfig(database_path=":memory:"),
+            response=ResponseConfig(
+                check_interval_seconds=60,
+                min_wait_seconds=300,
+                message_limit=20,
+                judgment_skip=JudgmentSkipConfig(
+                    enabled=True,
+                    thresholds=[
+                        JudgmentSkipThreshold(min_confidence=0.9, skip_seconds=43200),
+                        JudgmentSkipThreshold(min_confidence=0.7, skip_seconds=3600),
+                    ],
+                    default_skip_seconds=600,
+                ),
+            ),
+        )
+
+    @pytest.fixture
+    def config_skip_disabled(self) -> Config:
+        """Create test config with judgment skip disabled."""
+        return Config(
+            slack=SlackConfig(bot_token="xoxb-test", app_token="xapp-test"),
+            llm={"default": LLMConfig(model="gpt-4")},
+            persona=PersonaConfig(
+                name="TestBot", system_prompt="You are a friendly bot."
+            ),
+            memory=MemoryConfig(database_path=":memory:"),
+            response=ResponseConfig(
+                check_interval_seconds=60,
+                min_wait_seconds=300,
+                message_limit=20,
+                judgment_skip=JudgmentSkipConfig(enabled=False),
+            ),
+        )
+
+    @pytest.fixture
+    def use_case_with_skip(
+        self,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_response_generator: Mock,
+        mock_messaging_service: Mock,
+        mock_message_repository: Mock,
+        mock_judgment_cache_repository: Mock,
+        mock_conversation_history_service: Mock,
+        config_with_skip: Config,
+        bot_user_id: str,
+    ) -> AutonomousResponseUseCase:
+        """Create use case instance with skip enabled."""
+        return AutonomousResponseUseCase(
+            channel_monitor=mock_channel_monitor,
+            response_judgment=mock_response_judgment,
+            response_generator=mock_response_generator,
+            messaging_service=mock_messaging_service,
+            message_repository=mock_message_repository,
+            judgment_cache_repository=mock_judgment_cache_repository,
+            conversation_history_service=mock_conversation_history_service,
+            config=config_with_skip,
+            bot_user_id=bot_user_id,
+        )
+
+    @pytest.fixture
+    def use_case_skip_disabled(
+        self,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_response_generator: Mock,
+        mock_messaging_service: Mock,
+        mock_message_repository: Mock,
+        mock_judgment_cache_repository: Mock,
+        mock_conversation_history_service: Mock,
+        config_skip_disabled: Config,
+        bot_user_id: str,
+    ) -> AutonomousResponseUseCase:
+        """Create use case instance with skip disabled."""
+        return AutonomousResponseUseCase(
+            channel_monitor=mock_channel_monitor,
+            response_judgment=mock_response_judgment,
+            response_generator=mock_response_generator,
+            messaging_service=mock_messaging_service,
+            message_repository=mock_message_repository,
+            judgment_cache_repository=mock_judgment_cache_repository,
+            conversation_history_service=mock_conversation_history_service,
+            config=config_skip_disabled,
+            bot_user_id=bot_user_id,
+        )
+
+    async def test_skip_disabled_always_judges(
+        self,
+        use_case_skip_disabled: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_judgment_cache_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that judgment is always performed when skip is disabled."""
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text="Test message",
+            timestamp=timestamp,
+            mentions=[],
+        )
+        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_response_judgment.judge.return_value = JudgmentResult(
+            should_respond=False,
+            reason="Not interesting",
+            confidence=0.9,
+        )
+
+        await use_case_skip_disabled.check_channel(channel)
+
+        # Judgment should be called even if cache exists
+        mock_response_judgment.judge.assert_awaited_once()
+        # Cache should not be saved when disabled
+        mock_judgment_cache_repository.save.assert_not_awaited()
+
+    async def test_no_cache_performs_judgment_and_saves_cache(
+        self,
+        use_case_with_skip: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_judgment_cache_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that judgment is performed and cache is saved when no cache exists."""
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text="Test message",
+            timestamp=timestamp,
+            mentions=[],
+        )
+        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_judgment_cache_repository.find_by_scope.return_value = None
+        mock_response_judgment.judge.return_value = JudgmentResult(
+            should_respond=False,
+            reason="Not interesting",
+            confidence=0.85,
+        )
+
+        await use_case_with_skip.check_channel(channel)
+
+        # Judgment should be called
+        mock_response_judgment.judge.assert_awaited_once()
+        # Cache should be saved
+        mock_judgment_cache_repository.save.assert_awaited_once()
+
+    async def test_valid_cache_skips_judgment(
+        self,
+        use_case_with_skip: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_judgment_cache_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that judgment is skipped when valid cache exists."""
+        message = Message(
+            id="M001",  # Same as cached latest_message_ts
+            channel=channel,
+            user=user,
+            text="Test message",
+            timestamp=timestamp,
+            mentions=[],
+        )
+        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+
+        # Create a valid cache (future next_check_at, same message)
+        valid_cache = JudgmentCache(
+            channel_id=channel.id,
+            thread_ts=None,
+            should_respond=False,
+            confidence=0.9,
+            reason="Previously judged",
+            latest_message_ts="M001",  # Same as message.id
+            next_check_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        mock_judgment_cache_repository.find_by_scope.return_value = valid_cache
+
+        await use_case_with_skip.check_channel(channel)
+
+        # Judgment should NOT be called (skipped)
+        mock_response_judgment.judge.assert_not_awaited()
+
+    async def test_expired_cache_performs_judgment(
+        self,
+        use_case_with_skip: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_judgment_cache_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that judgment is performed when cache is expired."""
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text="Test message",
+            timestamp=timestamp,
+            mentions=[],
+        )
+        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+
+        # Create an expired cache
+        expired_cache = JudgmentCache(
+            channel_id=channel.id,
+            thread_ts=None,
+            should_respond=False,
+            confidence=0.9,
+            reason="Previously judged",
+            latest_message_ts="M001",
+            next_check_at=datetime.now(timezone.utc) - timedelta(hours=1),  # Expired
+            created_at=datetime.now(timezone.utc) - timedelta(hours=2),
+            updated_at=datetime.now(timezone.utc) - timedelta(hours=2),
+        )
+        mock_judgment_cache_repository.find_by_scope.return_value = expired_cache
+        mock_response_judgment.judge.return_value = JudgmentResult(
+            should_respond=False,
+            reason="Re-judged",
+            confidence=0.8,
+        )
+
+        await use_case_with_skip.check_channel(channel)
+
+        # Judgment should be called (cache expired)
+        mock_response_judgment.judge.assert_awaited_once()
+        # New cache should be saved
+        mock_judgment_cache_repository.save.assert_awaited_once()
+
+    async def test_new_message_invalidates_cache(
+        self,
+        use_case_with_skip: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_judgment_cache_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that new message invalidates cache and triggers judgment."""
+        message = Message(
+            id="M002",  # Different from cached latest_message_ts
+            channel=channel,
+            user=user,
+            text="New message",
+            timestamp=timestamp,
+            mentions=[],
+        )
+        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+
+        # Create a cache with different message ID
+        stale_cache = JudgmentCache(
+            channel_id=channel.id,
+            thread_ts=None,
+            should_respond=False,
+            confidence=0.9,
+            reason="Previously judged",
+            latest_message_ts="M001",  # Different from message.id
+            # Still valid by time
+            next_check_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        mock_judgment_cache_repository.find_by_scope.return_value = stale_cache
+        mock_response_judgment.judge.return_value = JudgmentResult(
+            should_respond=False,
+            reason="Re-judged due to new message",
+            confidence=0.7,
+        )
+
+        await use_case_with_skip.check_channel(channel)
+
+        # Judgment should be called (new message arrived)
+        mock_response_judgment.judge.assert_awaited_once()
+
+    async def test_high_confidence_gets_longer_skip(
+        self,
+        use_case_with_skip: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_judgment_cache_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that high confidence results in longer skip time."""
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text="Test message",
+            timestamp=timestamp,
+            mentions=[],
+        )
+        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_judgment_cache_repository.find_by_scope.return_value = None
+        mock_response_judgment.judge.return_value = JudgmentResult(
+            should_respond=False,
+            reason="Very sure",
+            confidence=0.95,  # >= 0.9 threshold
+        )
+
+        await use_case_with_skip.check_channel(channel)
+
+        # Check that cache was saved with appropriate skip time
+        mock_judgment_cache_repository.save.assert_awaited_once()
+        saved_cache = mock_judgment_cache_repository.save.call_args[0][0]
+        assert isinstance(saved_cache, JudgmentCache)
+        # 0.95 confidence should get 43200 seconds (12 hours) skip
+        expected_skip = timedelta(seconds=43200)
+        actual_skip = saved_cache.next_check_at - saved_cache.created_at
+        # Allow small tolerance for execution time
+        assert abs(actual_skip.total_seconds() - expected_skip.total_seconds()) < 5
+
+    async def test_medium_confidence_gets_medium_skip(
+        self,
+        use_case_with_skip: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_judgment_cache_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that medium confidence results in medium skip time."""
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text="Test message",
+            timestamp=timestamp,
+            mentions=[],
+        )
+        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_judgment_cache_repository.find_by_scope.return_value = None
+        mock_response_judgment.judge.return_value = JudgmentResult(
+            should_respond=False,
+            reason="Somewhat sure",
+            confidence=0.8,  # >= 0.7 but < 0.9 threshold
+        )
+
+        await use_case_with_skip.check_channel(channel)
+
+        # Check that cache was saved with appropriate skip time
+        mock_judgment_cache_repository.save.assert_awaited_once()
+        saved_cache = mock_judgment_cache_repository.save.call_args[0][0]
+        # 0.8 confidence should get 3600 seconds (1 hour) skip
+        expected_skip = timedelta(seconds=3600)
+        actual_skip = saved_cache.next_check_at - saved_cache.created_at
+        assert abs(actual_skip.total_seconds() - expected_skip.total_seconds()) < 5
+
+    async def test_low_confidence_gets_default_skip(
+        self,
+        use_case_with_skip: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_judgment_cache_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that low confidence results in default skip time."""
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text="Test message",
+            timestamp=timestamp,
+            mentions=[],
+        )
+        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_judgment_cache_repository.find_by_scope.return_value = None
+        mock_response_judgment.judge.return_value = JudgmentResult(
+            should_respond=False,
+            reason="Not sure",
+            confidence=0.5,  # < 0.7 threshold
+        )
+
+        await use_case_with_skip.check_channel(channel)
+
+        # Check that cache was saved with default skip time
+        mock_judgment_cache_repository.save.assert_awaited_once()
+        saved_cache = mock_judgment_cache_repository.save.call_args[0][0]
+        # 0.5 confidence should get 600 seconds (10 minutes) skip
+        expected_skip = timedelta(seconds=600)
+        actual_skip = saved_cache.next_check_at - saved_cache.created_at
+        assert abs(actual_skip.total_seconds() - expected_skip.total_seconds()) < 5

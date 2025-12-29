@@ -19,6 +19,7 @@ from myao2.infrastructure.persistence import (
     DBChannelMonitor,
     DBConversationHistoryService,
     SQLiteChannelRepository,
+    SQLiteJudgmentCacheRepository,
     SQLiteMessageRepository,
     SQLiteUserRepository,
 )
@@ -157,12 +158,15 @@ async def main() -> None:
         bot_user_id=bot_user_id,
     )
 
+    judgment_cache_repository = SQLiteJudgmentCacheRepository(db_manager.get_session)
+
     autonomous_response_use_case = AutonomousResponseUseCase(
         channel_monitor=channel_monitor,
         response_judgment=response_judgment,
         response_generator=response_generator,
         messaging_service=messaging_service,
         message_repository=message_repository,
+        judgment_cache_repository=judgment_cache_repository,
         conversation_history_service=conversation_history_service,
         config=config,
         bot_user_id=bot_user_id,

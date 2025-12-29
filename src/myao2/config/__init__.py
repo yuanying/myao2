@@ -9,6 +9,8 @@ from myao2.config.loader import (
 )
 from myao2.config.models import (
     Config,
+    JudgmentSkipConfig,
+    JudgmentSkipThreshold,
     LLMConfig,
     LoggingConfig,
     MemoryConfig,
@@ -22,6 +24,8 @@ __all__ = [
     "ConfigError",
     "ConfigValidationError",
     "EnvironmentVariableError",
+    "JudgmentSkipConfig",
+    "JudgmentSkipThreshold",
     "LLMConfig",
     "LoggingConfig",
     "MemoryConfig",
