@@ -34,6 +34,10 @@ class MemoryConfig:
 
     database_path: str
     long_term_update_interval_seconds: int = 3600
+    short_term_window_hours: int = 24
+    long_term_summary_max_tokens: int = 500
+    short_term_summary_max_tokens: int = 300
+    memory_generation_llm: str = "default"
 
 
 @dataclass

@@ -115,7 +115,7 @@ def _load_memory_config(memory_data: dict[str, Any]) -> MemoryConfig:
 
 ## 完了基準
 
-- [ ] MemoryConfig に新しいフィールドが追加されている
-- [ ] loader.py で新しいフィールドが読み込まれる
-- [ ] 新しいフィールドがない場合はデフォルト値が使用される
-- [ ] 全テストケースが通過する
+- [x] MemoryConfig に新しいフィールドが追加されている
+- [x] loader.py で新しいフィールドが読み込まれる
+- [x] 新しいフィールドがない場合はデフォルト値が使用される
+- [x] 全テストケースが通過する

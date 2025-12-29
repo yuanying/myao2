@@ -503,3 +503,183 @@ response:
 
         assert config.response.check_interval_seconds == 120
         assert config.response.min_wait_seconds == 300
+
+
+class TestMemoryConfigDataClass:
+    """MemoryConfigデータクラスのテスト"""
+
+    def test_memory_config_with_defaults(self) -> None:
+        """MemoryConfigのデフォルト値が正しい（database_pathのみ指定）"""
+        config = MemoryConfig(database_path="./data/memory.db")
+        assert config.database_path == "./data/memory.db"
+        assert config.long_term_update_interval_seconds == 3600
+        assert config.short_term_window_hours == 24
+        assert config.long_term_summary_max_tokens == 500
+        assert config.short_term_summary_max_tokens == 300
+        assert config.memory_generation_llm == "default"
+
+    def test_memory_config_custom_values(self) -> None:
+        """MemoryConfigの全フィールドにカスタム値が設定できる"""
+        config = MemoryConfig(
+            database_path="./custom/memory.db",
+            long_term_update_interval_seconds=7200,
+            short_term_window_hours=48,
+            long_term_summary_max_tokens=1000,
+            short_term_summary_max_tokens=600,
+            memory_generation_llm="memory",
+        )
+        assert config.database_path == "./custom/memory.db"
+        assert config.long_term_update_interval_seconds == 7200
+        assert config.short_term_window_hours == 48
+        assert config.long_term_summary_max_tokens == 1000
+        assert config.short_term_summary_max_tokens == 600
+        assert config.memory_generation_llm == "memory"
+
+    def test_memory_config_partial_values(self) -> None:
+        """MemoryConfigの部分的なカスタム値が設定できる"""
+        config = MemoryConfig(
+            database_path="./data/memory.db",
+            short_term_window_hours=12,
+            memory_generation_llm="custom",
+        )
+        assert config.database_path == "./data/memory.db"
+        assert config.long_term_update_interval_seconds == 3600  # default
+        assert config.short_term_window_hours == 12
+        assert config.long_term_summary_max_tokens == 500  # default
+        assert config.short_term_summary_max_tokens == 300  # default
+        assert config.memory_generation_llm == "custom"
+
+
+class TestLoadConfigWithMemoryExtension:
+    """load_config関数のMemoryConfig拡張テスト"""
+
+    def test_load_config_with_all_memory_fields(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """全ての新しいmemoryフィールドを読み込める"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+  long_term_update_interval_seconds: 7200
+  short_term_window_hours: 48
+  long_term_summary_max_tokens: 1000
+  short_term_summary_max_tokens: 600
+  memory_generation_llm: "memory"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.memory.database_path == "./data/memory.db"
+        assert config.memory.long_term_update_interval_seconds == 7200
+        assert config.memory.short_term_window_hours == 48
+        assert config.memory.long_term_summary_max_tokens == 1000
+        assert config.memory.short_term_summary_max_tokens == 600
+        assert config.memory.memory_generation_llm == "memory"
+
+    def test_load_config_without_new_memory_fields(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """新しいmemoryフィールドがない場合はデフォルト値が使用される"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.memory.database_path == "./data/memory.db"
+        assert config.memory.long_term_update_interval_seconds == 3600
+        assert config.memory.short_term_window_hours == 24
+        assert config.memory.long_term_summary_max_tokens == 500
+        assert config.memory.short_term_summary_max_tokens == 300
+        assert config.memory.memory_generation_llm == "default"
+
+    def test_load_config_with_partial_memory_fields(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """memoryフィールドが部分的な場合、残りはデフォルト値が使用される"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+  short_term_window_hours: 12
+  memory_generation_llm: "custom"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.memory.database_path == "./data/memory.db"
+        assert config.memory.long_term_update_interval_seconds == 3600  # default
+        assert config.memory.short_term_window_hours == 12
+        assert config.memory.long_term_summary_max_tokens == 500  # default
+        assert config.memory.short_term_summary_max_tokens == 300  # default
+        assert config.memory.memory_generation_llm == "custom"
+
+    def test_load_config_memory_generation_llm_nonexistent(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """存在しないLLM設定名でも読み込み成功（使用時に検証）"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+  memory_generation_llm: "nonexistent_llm"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.memory.memory_generation_llm == "nonexistent_llm"

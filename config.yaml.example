@@ -40,7 +40,11 @@ response:
 # 記憶設定
 memory:
   database_path: "./data/memory.db"
-  long_term_update_interval_seconds: 3600
+  long_term_update_interval_seconds: 3600  # 長期記憶更新間隔（秒）
+  short_term_window_hours: 24              # 短期記憶の時間窓（時間）
+  long_term_summary_max_tokens: 500        # 長期記憶の最大トークン数
+  short_term_summary_max_tokens: 300       # 短期記憶の最大トークン数
+  memory_generation_llm: "default"         # 記憶生成に使用する LLM 設定名
 
 # ログ設定（オプショナル）
 logging:
