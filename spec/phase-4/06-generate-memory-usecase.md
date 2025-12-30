@@ -19,6 +19,7 @@
 ## 依存関係
 
 - タスク 03（MemoryRepository）に依存
+- タスク 04a（Context、ChannelMessages）に依存
 - タスク 05（MemorySummarizer）に依存
 
 ---
@@ -31,7 +32,9 @@
 import logging
 from datetime import datetime, timedelta
 
-from myao2.config.models import MemoryConfig
+from myao2.config.models import MemoryConfig, PersonaConfig
+from myao2.domain.entities.channel_messages import ChannelMemory, ChannelMessages
+from myao2.domain.entities.context import Context
 from myao2.domain.entities.memory import (
     Memory,
     MemoryScope,
@@ -51,6 +54,7 @@ class GenerateMemoryUseCase:
     """記憶生成ユースケース
 
     ワークスペース、チャンネル、スレッドの記憶を生成・更新する。
+    MemorySummarizer に Context を渡して記憶を生成する。
     """
 
     # ワークスペースの固定 scope_id
@@ -63,36 +67,59 @@ class GenerateMemoryUseCase:
         channel_repository: ChannelRepository,
         memory_summarizer: MemorySummarizer,
         config: MemoryConfig,
+        persona: PersonaConfig,
     ) -> None:
         self._memory_repository = memory_repository
         self._message_repository = message_repository
         self._channel_repository = channel_repository
         self._memory_summarizer = memory_summarizer
         self._config = config
+        self._persona = persona
 
     async def execute(self) -> None:
         """全記憶を生成・更新する
 
-        1. ワークスペース記憶を生成
-        2. 全チャンネルの記憶を生成
-        3. アクティブなスレッドの記憶を生成
+        処理順序（依存関係に基づく）:
+        1. 全チャンネルの短期記憶を生成（メッセージから）
+        2. 全チャンネルの長期記憶を生成（短期記憶をマージ）
+        3. ワークスペース短期記憶を生成（チャンネル短期記憶を統合）
+        4. ワークスペース長期記憶を生成（チャンネル長期記憶を統合）
+        5. アクティブなスレッドの短期記憶を生成
         """
         ...
 
-    async def generate_workspace_memory(self) -> None:
-        """ワークスペースの記憶を生成・更新する"""
+    async def generate_channel_memories(self) -> dict[str, ChannelMemory]:
+        """全チャンネルの記憶を生成・更新する
+
+        Returns:
+            生成されたチャンネル記憶のマップ（channel_id -> ChannelMemory）
+        """
         ...
 
-    async def generate_channel_memory(self, channel_id: str) -> None:
-        """チャンネルの記憶を生成・更新する"""
+    async def generate_workspace_memory(
+        self,
+        channel_memories: dict[str, ChannelMemory],
+    ) -> None:
+        """ワークスペースの記憶を生成・更新する
+
+        Args:
+            channel_memories: チャンネル記憶（ワークスペース記憶生成に使用）
+        """
         ...
 
     async def generate_thread_memory(
         self,
         channel_id: str,
         thread_ts: str,
+        channel_memory: ChannelMemory | None = None,
     ) -> None:
-        """スレッドの記憶を生成・更新する"""
+        """スレッドの記憶を生成・更新する
+
+        Args:
+            channel_id: チャンネル ID
+            thread_ts: スレッドの親メッセージ ts
+            channel_memory: チャンネルの記憶（補助情報用）
+        """
         ...
 ```
 
@@ -103,177 +130,295 @@ class GenerateMemoryUseCase:
 ### execute()
 
 ```
-1. generate_workspace_memory() を呼び出す
-2. 全チャンネルを取得
-3. 各チャンネルについて:
-   a. generate_channel_memory(channel_id) を呼び出す
-   b. アクティブなスレッドを特定
-   c. 各スレッドについて generate_thread_memory(channel_id, thread_ts) を呼び出す
-4. エラーはログに記録し、次のチャンネル/スレッドを処理
+1. 全チャンネルを取得
+2. 各チャンネルについて:
+   a. 短期記憶を生成（メッセージから）
+   b. 長期記憶を生成（短期記憶をマージ）
+   c. ChannelMemory を構築
+3. ワークスペース短期記憶を生成（チャンネル短期記憶を統合）
+4. ワークスペース長期記憶を生成（チャンネル長期記憶を統合）
+5. 各チャンネルのアクティブなスレッドを特定
+6. 各スレッドの短期記憶を生成
+7. エラーはログに記録し、次のチャンネル/スレッドを処理
+```
+
+### generate_channel_memories()
+
+```
+1. 全チャンネルを取得
+2. 各チャンネルについて:
+   a. 短期記憶を生成:
+      - メッセージを取得（時間窓内）
+      - Context を構築（conversation_history にメッセージをセット）
+      - MemorySummarizer.summarize() を呼び出し
+   b. 長期記憶を生成:
+      - 既存の長期記憶を取得
+      - Context を構築（channel_memories に短期記憶をセット）
+      - MemorySummarizer.summarize() を呼び出し
+   c. ChannelMemory を構築して返す
 ```
 
 ### generate_workspace_memory()
 
 ```
 1. 既存のワークスペース長期記憶を取得
-2. 前回更新時の最新メッセージ ts を確認
-3. 新しいメッセージを取得（全チャンネルから）
-4. 新しいメッセージがあれば長期記憶を更新
-5. 既存のワークスペース短期記憶を取得
-6. 短期記憶用のメッセージを取得（短期間の時間窓）
-7. 新しいメッセージがあれば短期記憶を更新（なければ既存を保持）
-```
-
-### generate_channel_memory()
-
-```
-1. 既存のチャンネル長期記憶を取得
-2. 前回更新時の最新メッセージ ts を確認
-3. 新しいメッセージを取得（チャンネル内）
-4. 新しいメッセージがあれば長期記憶を更新
-5. 既存のチャンネル短期記憶を取得
-6. 短期記憶用のメッセージを取得（短期間の時間窓）
-7. 新しいメッセージがあれば短期記憶を更新（なければ既存を保持）
+2. 短期記憶を生成:
+   - Context を構築（channel_memories にチャンネル短期記憶をセット）
+   - MemorySummarizer.summarize() を呼び出し
+3. 長期記憶を生成:
+   - Context を構築（channel_memories にチャンネル長期記憶をセット）
+   - MemorySummarizer.summarize() を呼び出し
 ```
 
 ### generate_thread_memory()
 
 ```
-1. 既存のスレッド短期記憶を取得
-2. スレッドのメッセージを取得
-3. 新しいメッセージがあれば短期記憶を更新（なければ既存を保持）
+1. スレッドのメッセージを取得
+2. Context を構築:
+   - conversation_history にチャンネルメッセージをセット
+   - target_thread_ts をセット
+   - channel_memories にチャンネル記憶をセット（補助情報用）
+3. MemorySummarizer.summarize() を呼び出し（短期記憶のみ）
 ```
 
 ---
 
 ## 実装詳細
 
+### チャンネル記憶の生成
+
+```python
+async def _generate_channel_short_term_memory(
+    self,
+    channel_id: str,
+    channel_name: str,
+) -> str | None:
+    """チャンネルの短期記憶を生成する"""
+    # 時間窓内のメッセージを取得
+    since = datetime.now() - timedelta(hours=self._config.short_term_window_hours)
+    messages = await self._message_repository.find_by_channel_since(
+        channel_id=channel_id,
+        since=since,
+        limit=1000,
+    )
+
+    if not messages:
+        return None
+
+    # ChannelMessages を構築
+    channel_messages = self._build_channel_messages(
+        channel_id, channel_name, messages
+    )
+
+    # Context を構築
+    context = Context(
+        persona=self._persona,
+        conversation_history=channel_messages,
+    )
+
+    # 短期記憶を生成
+    content = await self._memory_summarizer.summarize(
+        context=context,
+        scope=MemoryScope.CHANNEL,
+        memory_type=MemoryType.SHORT_TERM,
+    )
+
+    return content if content else None
+
+
+async def _generate_channel_long_term_memory(
+    self,
+    channel_id: str,
+    channel_name: str,
+    short_term_memory: str | None,
+) -> str | None:
+    """チャンネルの長期記憶を生成する（短期記憶をマージ）"""
+    if not short_term_memory:
+        # 短期記憶がなければ既存の長期記憶を維持
+        existing = await self._memory_repository.find_by_scope_and_type(
+            MemoryScope.CHANNEL, channel_id, MemoryType.LONG_TERM
+        )
+        return existing.content if existing else None
+
+    # 既存の長期記憶を取得
+    existing = await self._memory_repository.find_by_scope_and_type(
+        MemoryScope.CHANNEL, channel_id, MemoryType.LONG_TERM
+    )
+    existing_content = existing.content if existing else None
+
+    # Context を構築（短期記憶を channel_memories にセット）
+    channel_messages = ChannelMessages(
+        channel_id=channel_id,
+        channel_name=channel_name,
+    )
+    channel_memory = ChannelMemory(
+        channel_id=channel_id,
+        channel_name=channel_name,
+        short_term_memory=short_term_memory,
+    )
+    context = Context(
+        persona=self._persona,
+        conversation_history=channel_messages,
+        channel_memories={channel_id: channel_memory},
+    )
+
+    # 長期記憶を生成
+    content = await self._memory_summarizer.summarize(
+        context=context,
+        scope=MemoryScope.CHANNEL,
+        memory_type=MemoryType.LONG_TERM,
+        existing_memory=existing_content,
+    )
+
+    return content if content else None
+```
+
 ### ワークスペース記憶の生成
 
 ```python
-async def generate_workspace_memory(self) -> None:
+async def generate_workspace_memory(
+    self,
+    channel_memories: dict[str, ChannelMemory],
+) -> None:
     """ワークスペースの記憶を生成・更新する"""
     logger.info("Generating workspace memory")
 
-    # 長期記憶の更新
-    await self._generate_memory(
-        scope=MemoryScope.WORKSPACE,
-        scope_id=self.WORKSPACE_SCOPE_ID,
-        memory_type=MemoryType.LONG_TERM,
+    # 既存の長期記憶を取得
+    existing_long_term = await self._memory_repository.find_by_scope_and_type(
+        MemoryScope.WORKSPACE, self.WORKSPACE_SCOPE_ID, MemoryType.LONG_TERM
+    )
+    existing_long_term_content = existing_long_term.content if existing_long_term else None
+
+    # 空の conversation_history を作成
+    empty_channel_messages = ChannelMessages(
+        channel_id="",
+        channel_name="",
     )
 
-    # 短期記憶の生成
-    await self._generate_memory(
+    # 短期記憶を生成
+    context_short = Context(
+        persona=self._persona,
+        conversation_history=empty_channel_messages,
+        channel_memories=channel_memories,
+    )
+    short_term_content = await self._memory_summarizer.summarize(
+        context=context_short,
         scope=MemoryScope.WORKSPACE,
-        scope_id=self.WORKSPACE_SCOPE_ID,
         memory_type=MemoryType.SHORT_TERM,
     )
-```
 
-### 共通記憶生成処理
-
-```python
-async def _generate_memory(
-    self,
-    scope: MemoryScope,
-    scope_id: str,
-    memory_type: MemoryType,
-) -> None:
-    """記憶を生成・更新する共通処理"""
-    # 既存の記憶を取得
-    existing = await self._memory_repository.find_by_scope_and_type(
-        scope, scope_id, memory_type
+    # 長期記憶を生成
+    context_long = Context(
+        persona=self._persona,
+        conversation_history=empty_channel_messages,
+        channel_memories=channel_memories,
     )
-
-    # メッセージを取得
-    messages = await self._get_messages_for_memory(
-        scope, scope_id, memory_type, existing
-    )
-
-    if not messages and not existing:
-        logger.debug(f"No messages for {scope.value}/{scope_id}/{memory_type.value}")
-        return
-
-    # 新しいメッセージがなければ既存記憶を保持
-    if not messages and existing:
-        logger.debug(
-            f"No new messages for {scope.value}/{scope_id}/{memory_type.value}, "
-            "keeping existing memory"
-        )
-        return
-
-    # 記憶を生成
-    existing_content = existing.content if existing else None
-    content = await self._memory_summarizer.summarize(
-        messages=messages,
-        scope=scope,
-        memory_type=memory_type,
-        existing_memory=existing_content if memory_type == MemoryType.LONG_TERM else None,
+    long_term_content = await self._memory_summarizer.summarize(
+        context=context_long,
+        scope=MemoryScope.WORKSPACE,
+        memory_type=MemoryType.LONG_TERM,
+        existing_memory=existing_long_term_content,
     )
 
     # 記憶を保存
-    if existing:
-        # 更新
-        updated_memory = Memory(
-            id=existing.id,
-            scope=scope,
-            scope_id=scope_id,
-            memory_type=memory_type,
-            content=content,
-            created_at=existing.created_at,
-            updated_at=datetime.now(),
-            source_message_count=len(messages) + existing.source_message_count,
-            source_latest_message_ts=self._get_latest_message_ts(messages)
-            or existing.source_latest_message_ts,
-        )
-    else:
-        # 新規作成
-        updated_memory = create_memory(
-            scope=scope,
-            scope_id=scope_id,
-            memory_type=memory_type,
-            content=content,
-            source_message_count=len(messages),
-            source_latest_message_ts=self._get_latest_message_ts(messages),
-        )
-
-    await self._memory_repository.save(updated_memory)
-    logger.info(f"Generated {scope.value}/{scope_id}/{memory_type.value} memory")
+    await self._save_memory(
+        MemoryScope.WORKSPACE,
+        self.WORKSPACE_SCOPE_ID,
+        MemoryType.SHORT_TERM,
+        short_term_content,
+    )
+    await self._save_memory(
+        MemoryScope.WORKSPACE,
+        self.WORKSPACE_SCOPE_ID,
+        MemoryType.LONG_TERM,
+        long_term_content,
+    )
 ```
 
-### メッセージ取得
+### スレッド記憶の生成
 
 ```python
-async def _get_messages_for_memory(
+async def generate_thread_memory(
     self,
-    scope: MemoryScope,
-    scope_id: str,
-    memory_type: MemoryType,
-    existing: Memory | None,
-) -> list[Message]:
-    """記憶生成用のメッセージを取得
+    channel_id: str,
+    thread_ts: str,
+    channel_memory: ChannelMemory | None = None,
+) -> None:
+    """スレッドの記憶を生成・更新する"""
+    # スレッドのメッセージを取得
+    messages = await self._message_repository.find_by_thread(
+        channel_id=channel_id,
+        thread_ts=thread_ts,
+    )
 
-    長期記憶・短期記憶ともに、既存記憶の source_latest_message_ts 以降の
-    新しいメッセージのみを返す。新しいメッセージがなければ空リストを返す。
-    """
-    if memory_type == MemoryType.LONG_TERM:
-        # 長期記憶: 前回更新以降のメッセージ
-        since_ts = existing.source_latest_message_ts if existing else None
-        return await self._get_messages_since(scope, scope_id, since_ts)
-    else:
-        # 短期記憶: 時間窓内かつ前回更新以降のメッセージ
-        since = datetime.now() - timedelta(hours=self._config.short_term_window_hours)
-        since_ts = str(since.timestamp())
+    if not messages:
+        return
 
-        # 既存記憶がある場合、前回の最新メッセージ以降のみ取得
-        if existing and existing.source_latest_message_ts:
-            # 時間窓の開始点と前回の最新メッセージtsの大きい方を使用
-            since_ts = max(since_ts, existing.source_latest_message_ts)
+    # ChannelMessages を構築
+    channel = await self._channel_repository.find_by_id(channel_id)
+    channel_name = channel.name if channel else ""
+    channel_messages = ChannelMessages(
+        channel_id=channel_id,
+        channel_name=channel_name,
+        thread_messages={thread_ts: messages},
+    )
 
-        messages = await self._get_messages_since(scope, scope_id, since_ts)
+    # Context を構築
+    channel_memories = {}
+    if channel_memory:
+        channel_memories[channel_id] = channel_memory
 
-        # 新しいメッセージがなければ空リストを返す（既存記憶を保持するため）
-        return messages
+    context = Context(
+        persona=self._persona,
+        conversation_history=channel_messages,
+        target_thread_ts=thread_ts,
+        channel_memories=channel_memories,
+    )
+
+    # 短期記憶を生成
+    content = await self._memory_summarizer.summarize(
+        context=context,
+        scope=MemoryScope.THREAD,
+        memory_type=MemoryType.SHORT_TERM,
+    )
+
+    if content:
+        scope_id = make_thread_scope_id(channel_id, thread_ts)
+        await self._save_memory(
+            MemoryScope.THREAD,
+            scope_id,
+            MemoryType.SHORT_TERM,
+            content,
+        )
+```
+
+### ChannelMessages の構築
+
+```python
+def _build_channel_messages(
+    self,
+    channel_id: str,
+    channel_name: str,
+    messages: list[Message],
+) -> ChannelMessages:
+    """メッセージリストから ChannelMessages を構築する"""
+    top_level: list[Message] = []
+    threads: dict[str, list[Message]] = {}
+
+    for msg in messages:
+        if msg.thread_ts:
+            if msg.thread_ts not in threads:
+                threads[msg.thread_ts] = []
+            threads[msg.thread_ts].append(msg)
+        else:
+            top_level.append(msg)
+
+    return ChannelMessages(
+        channel_id=channel_id,
+        channel_name=channel_name,
+        top_level_messages=top_level,
+        thread_messages=threads,
+    )
 ```
 
 ---
@@ -290,7 +435,7 @@ async def _get_active_threads(self, channel_id: str) -> list[str]:
     messages = await self._message_repository.find_by_channel_since(
         channel_id=channel_id,
         since=since,
-        limit=1000,  # 十分な数
+        limit=1000,
     )
 
     # スレッドのルートメッセージを収集
@@ -306,13 +451,26 @@ async def _get_active_threads(self, channel_id: str) -> list[str]:
 
 ## 設計上の考慮事項
 
-### インクリメンタル更新
+### 処理順序と依存関係
 
-- 長期記憶・短期記憶ともに前回更新以降の新しいメッセージのみ処理
-- `source_latest_message_ts` で前回の最新メッセージを記録
-- 新しいメッセージがなければ既存記憶を保持（再生成しない）
-- 長期記憶は LLM で既存記憶と新しいメッセージをマージ
-- 短期記憶は時間窓内のメッセージで再生成（ただし更新がある場合のみ）
+新しい仕様では、記憶生成に依存関係がある：
+
+1. **チャンネル長期記憶**は**チャンネル短期記憶**に依存
+2. **ワークスペース短期記憶**は**チャンネル短期記憶**に依存
+3. **ワークスペース長期記憶**は**チャンネル長期記憶**に依存
+
+そのため、処理順序は：
+チャンネル短期 → チャンネル長期 → ワークスペース短期 → ワークスペース長期 → スレッド
+
+### Context 構築パターン
+
+| スコープ | memory_type | conversation_history | channel_memories | target_thread_ts |
+|---------|-------------|---------------------|------------------|------------------|
+| CHANNEL | SHORT_TERM | メッセージをセット | 空 | なし |
+| CHANNEL | LONG_TERM | 空 | 短期記憶をセット | なし |
+| WORKSPACE | SHORT_TERM | 空 | 各チャンネルの記憶をセット | なし |
+| WORKSPACE | LONG_TERM | 空 | 各チャンネルの記憶をセット | なし |
+| THREAD | SHORT_TERM | スレッドメッセージをセット | チャンネル記憶をセット | thread_ts |
 
 ### エラーハンドリング
 
@@ -322,7 +480,6 @@ async def _get_active_threads(self, channel_id: str) -> list[str]:
 
 ### パフォーマンス
 
-- ワークスペース記憶は全チャンネルのメッセージを対象
 - チャンネル数が多い場合は処理時間が増加
 - 必要に応じて並列処理を検討（将来拡張）
 
@@ -338,21 +495,24 @@ async def _get_active_threads(self, channel_id: str) -> list[str]:
 | チャンネルなし | チャンネルが空 | エラーなし |
 | 部分エラー | 一部チャンネルでエラー | 他チャンネルは処理される |
 
+### generate_channel_memories
+
+| テスト | シナリオ | 期待結果 |
+|--------|---------|---------|
+| 新規生成 | 既存記憶なし、メッセージあり | 短期・長期記憶が生成される |
+| 更新 | 既存記憶あり、新メッセージあり | 記憶が更新される |
+| メッセージなし | メッセージが空 | 既存記憶を維持 |
+| Context 構築 | 短期記憶生成 | conversation_history にメッセージがセットされる |
+| Context 構築 | 長期記憶生成 | channel_memories に短期記憶がセットされる |
+
 ### generate_workspace_memory
 
 | テスト | シナリオ | 期待結果 |
 |--------|---------|---------|
-| 新規生成 | 既存記憶なし | 長期・短期記憶が生成される |
-| 更新 | 既存記憶あり、新メッセージあり | 記憶が更新される |
-| 更新なし | 既存記憶あり、新メッセージなし | 記憶は変更されない |
-
-### generate_channel_memory
-
-| テスト | シナリオ | 期待結果 |
-|--------|---------|---------|
-| 新規生成 | 既存記憶なし | 長期・短期記憶が生成される |
+| 新規生成 | 既存記憶なし | 短期・長期記憶が生成される |
 | 更新 | 既存記憶あり | 記憶が更新される |
-| メッセージなし | メッセージが空 | 記憶は生成されない |
+| Context 構築 | 短期記憶生成 | channel_memories に短期記憶がセットされる |
+| Context 構築 | 長期記憶生成 | channel_memories に長期記憶がセットされる |
 
 ### generate_thread_memory
 
@@ -360,17 +520,24 @@ async def _get_active_threads(self, channel_id: str) -> list[str]:
 |--------|---------|---------|
 | 正常生成 | スレッドにメッセージあり | 短期記憶が生成される |
 | メッセージなし | スレッドにメッセージなし | 記憶は生成されない |
+| Context 構築 | target_thread_ts | target_thread_ts がセットされる |
+| 補助情報 | channel_memory あり | channel_memories にセットされる |
 
 ---
 
 ## 完了基準
 
 - [ ] GenerateMemoryUseCase が実装されている
-- [ ] execute() で全記憶が生成される
+- [ ] execute() で全記憶が正しい順序で生成される
+- [ ] generate_channel_memories() でチャンネル記憶が生成される
+  - [ ] 短期記憶: メッセージから Context を構築
+  - [ ] 長期記憶: 短期記憶を channel_memories にセット
 - [ ] generate_workspace_memory() でワークスペース記憶が生成される
-- [ ] generate_channel_memory() でチャンネル記憶が生成される
+  - [ ] 短期記憶: チャンネル短期記憶を統合
+  - [ ] 長期記憶: チャンネル長期記憶を統合
 - [ ] generate_thread_memory() でスレッド記憶が生成される
-- [ ] インクリメンタル更新がサポートされている
+  - [ ] target_thread_ts が正しくセットされる
+- [ ] Context 構築が正しく行われている
 - [ ] エラーハンドリングが実装されている
 - [ ] `__init__.py` でエクスポートされている
 - [ ] 全テストケースが通過する
