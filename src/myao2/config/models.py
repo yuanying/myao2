@@ -91,6 +91,9 @@ class ResponseConfig:
     min_wait_seconds: int = 300
     message_limit: int = 20
     max_message_age_seconds: int = 43200  # 12 hours
+    channel_messages_limit: int = 50
+    active_channel_days: int = 7
+    thread_memory_days: int = 7
     judgment_skip: JudgmentSkipConfig | None = None
 
 
