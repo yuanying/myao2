@@ -102,7 +102,9 @@ class LLMResponseJudgment:
             OpenAI-format message list.
         """
         system_prompt = self._build_system_prompt(context.persona, current_time)
-        conversation = self._format_conversation(context.conversation_history)
+        # Interim: use get_all_messages() for compatibility
+        all_messages = context.conversation_history.get_all_messages()
+        conversation = self._format_conversation(all_messages)
         target_msg = self._format_message(message)
 
         user_content = f"会話履歴:\n{conversation}\n\n判定対象メッセージ:\n{target_msg}"

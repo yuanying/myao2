@@ -530,10 +530,10 @@ async def _build_context(
 
 ## 完了基準
 
-- [ ] ChannelMessages エンティティが実装されている
-- [ ] ChannelMemory エンティティが実装されている
-- [ ] Context が新しい構造に変更されている
-- [ ] ResponseConfig に新しい設定が追加されている
-- [ ] config.yaml.example が更新されている
-- [ ] 影響を受けるコンポーネントに暫定処置が適用されている
-- [ ] 全てのテストケースが通過する
+- [x] ChannelMessages エンティティが実装されている
+- [x] ChannelMemory エンティティが実装されている
+- [x] Context が新しい構造に変更されている
+- [x] ResponseConfig に新しい設定が追加されている
+- [x] config.yaml.example が更新されている
+- [x] 影響を受けるコンポーネントに暫定処置が適用されている
+- [x] 全てのテストケースが通過する

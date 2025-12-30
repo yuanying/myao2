@@ -18,6 +18,7 @@ from myao2.config import (
     SlackConfig,
 )
 from myao2.domain.entities import Channel, Context, Message, User
+from myao2.domain.entities.channel_messages import ChannelMessages
 from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
 from myao2.domain.exceptions import ChannelNotAccessibleError
@@ -472,10 +473,10 @@ class TestAutonomousResponseUseCaseHistoryFetching:
         mock_conversation_history_service.fetch_thread_history.assert_not_awaited()
 
 
-class TestAutonomousResponseUseCaseOtherChannelMessages:
-    """Tests for other channel messages building."""
+class TestAutonomousResponseUseCaseContextBuilding:
+    """Tests for context building."""
 
-    async def test_other_channel_messages_excludes_target_channel(
+    async def test_context_uses_channel_messages_structure(
         self,
         use_case: AutonomousResponseUseCase,
         mock_channel_monitor: Mock,
@@ -485,17 +486,7 @@ class TestAutonomousResponseUseCaseOtherChannelMessages:
         user: User,
         timestamp: datetime,
     ) -> None:
-        """Test that other_channel_messages excludes the target channel."""
-        other_channel = Channel(id="C456", name="random")
-        other_message = Message(
-            id="M002",
-            channel=other_channel,
-            user=user,
-            text="Message in other channel",
-            timestamp=timestamp,
-            mentions=[],
-        )
-
+        """Test that context uses ChannelMessages structure."""
         message = Message(
             id="M001",
             channel=channel,
@@ -505,9 +496,8 @@ class TestAutonomousResponseUseCaseOtherChannelMessages:
             mentions=[],
         )
 
-        mock_channel_monitor.get_channels.return_value = [channel, other_channel]
+        mock_channel_monitor.get_channels.return_value = [channel]
         mock_channel_monitor.get_unreplied_messages.return_value = [message]
-        mock_channel_monitor.get_recent_messages.return_value = [other_message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=True,
             reason="Reply needed",
@@ -516,87 +506,15 @@ class TestAutonomousResponseUseCaseOtherChannelMessages:
 
         await use_case.check_channel(channel)
 
-        # Verify response generator was called with other_channel_messages
+        # Verify response generator was called with ChannelMessages-based context
         mock_response_generator.generate.assert_awaited_once()
         call_args = mock_response_generator.generate.call_args
         context = call_args.kwargs["context"]
         assert isinstance(context, Context)
-        # other_channel_messages should contain the other channel's message
-        assert "random" in context.other_channel_messages
-        assert len(context.other_channel_messages["random"]) == 1
-        other_msg = context.other_channel_messages["random"][0]
-        assert other_msg.text == "Message in other channel"
-
-    async def test_other_channel_messages_from_multiple_channels(
-        self,
-        use_case: AutonomousResponseUseCase,
-        mock_channel_monitor: Mock,
-        mock_response_judgment: Mock,
-        mock_response_generator: Mock,
-        channel: Channel,
-        user: User,
-        timestamp: datetime,
-    ) -> None:
-        """Test that other_channel_messages includes messages from multiple channels."""
-        channel2 = Channel(id="C456", name="random")
-        channel3 = Channel(id="C789", name="dev")
-
-        message2 = Message(
-            id="M002",
-            channel=channel2,
-            user=user,
-            text="Random talk",
-            timestamp=timestamp,
-            mentions=[],
-        )
-        message3 = Message(
-            id="M003",
-            channel=channel3,
-            user=user,
-            text="Dev discussion",
-            timestamp=timestamp,
-            mentions=[],
-        )
-
-        target_message = Message(
-            id="M001",
-            channel=channel,
-            user=user,
-            text="Target message",
-            timestamp=timestamp,
-            mentions=[],
-        )
-
-        mock_channel_monitor.get_channels.return_value = [channel, channel2, channel3]
-        mock_channel_monitor.get_unreplied_messages.return_value = [target_message]
-
-        def get_recent_messages_side_effect(channel_id: str, **kwargs) -> list[Message]:  # noqa: ANN003
-            if channel_id == "C456":
-                return [message2]
-            elif channel_id == "C789":
-                return [message3]
-            return []
-
-        mock_channel_monitor.get_recent_messages.side_effect = (
-            get_recent_messages_side_effect
-        )
-        mock_response_judgment.judge.return_value = JudgmentResult(
-            should_respond=True,
-            reason="Reply needed",
-            confidence=0.9,
-        )
-
-        await use_case.check_channel(channel)
-
-        mock_response_generator.generate.assert_awaited_once()
-        call_args = mock_response_generator.generate.call_args
-        context = call_args.kwargs["context"]
-
-        # Both channels should be in other_channel_messages
-        assert "random" in context.other_channel_messages
-        assert "dev" in context.other_channel_messages
-        assert context.other_channel_messages["random"][0].text == "Random talk"
-        assert context.other_channel_messages["dev"][0].text == "Dev discussion"
+        # conversation_history should be ChannelMessages
+        assert isinstance(context.conversation_history, ChannelMessages)
+        assert context.conversation_history.channel_id == channel.id
+        assert context.conversation_history.channel_name == channel.name
 
 
 class TestAutonomousResponseUseCaseMessageSaving:
