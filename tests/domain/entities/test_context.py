@@ -437,9 +437,5 @@ class TestThreadMemories:
         assert (
             context.thread_memories["1234567890.000000"] == "Bug fix discussion summary"
         )
-        assert (
-            context.thread_memories["1234567891.000000"] == "Feature design summary"
-        )
-        assert (
-            context.thread_memories["1234567892.000000"] == "Code review summary"
-        )
+        assert context.thread_memories["1234567891.000000"] == "Feature design summary"
+        assert context.thread_memories["1234567892.000000"] == "Code review summary"

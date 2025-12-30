@@ -8,6 +8,7 @@ import pytest
 from myao2.application.use_cases import ReplyToMentionUseCase
 from myao2.config import PersonaConfig
 from myao2.domain.entities import Channel, Context, Message, User
+from myao2.domain.entities.channel_messages import ChannelMessages
 
 
 @pytest.fixture
@@ -378,7 +379,9 @@ class TestReplyToMentionUseCaseContextBuilding:
         assert passed_message == message
         assert isinstance(passed_context, Context)
         assert passed_context.persona == persona
-        assert passed_context.conversation_history == history
+        # conversation_history is now ChannelMessages
+        assert isinstance(passed_context.conversation_history, ChannelMessages)
+        assert passed_context.conversation_history.get_all_messages() == history
 
     async def test_builds_context_with_empty_history(
         self,
@@ -405,7 +408,9 @@ class TestReplyToMentionUseCaseContextBuilding:
         call_args = mock_response_generator.generate.call_args
         passed_context = call_args.kwargs["context"]
 
-        assert passed_context.conversation_history == []
+        # conversation_history is now ChannelMessages
+        assert isinstance(passed_context.conversation_history, ChannelMessages)
+        assert passed_context.conversation_history.get_all_messages() == []
 
 
 class TestReplyToMentionUseCaseContextGeneration:

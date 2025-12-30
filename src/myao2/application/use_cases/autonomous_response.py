@@ -1,11 +1,14 @@
 """Autonomous response use case."""
 
 import logging
-import uuid
 from datetime import datetime, timedelta, timezone
 
+from myao2.application.use_cases.helpers import (
+    build_channel_messages,
+    create_bot_message,
+)
 from myao2.config import Config, JudgmentSkipConfig
-from myao2.domain.entities import Channel, Context, Message, User
+from myao2.domain.entities import Channel, Context, Message
 from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
 from myao2.domain.exceptions import ChannelNotAccessibleError
@@ -136,10 +139,21 @@ class AutonomousResponseUseCase:
         # Get conversation history
         conversation_history = await self._get_conversation_history(message)
 
+        # TODO(task-08): Build proper ChannelMessages with full channel context
+        # Currently only includes thread or recent channel messages,
+        # not full channel structure.
+        # Task 08 will implement proper ChannelMessages construction with:
+        # - Full channel message structure (top-level + thread separation)
+        # - workspace_long_term_memory, workspace_short_term_memory
+        # - channel_memories with long/short term memories
+        # - thread_memories for recent thread summaries
+        channel_messages = build_channel_messages(conversation_history, channel)
+
         # Build context for judgment (without auxiliary context)
         judgment_context = Context(
             persona=self._config.persona,
-            conversation_history=conversation_history,
+            conversation_history=channel_messages,
+            target_thread_ts=message.thread_ts,
         )
 
         # Perform response judgment
@@ -163,14 +177,11 @@ class AutonomousResponseUseCase:
         if not judgment_result.should_respond:
             return
 
-        # Build other channel messages
-        other_channel_messages = await self._build_other_channel_messages(channel)
-
-        # Build context for response generation (with other channel messages)
+        # Build context for response generation (interim: no channel_memories)
         response_context = Context(
             persona=self._config.persona,
-            conversation_history=conversation_history,
-            other_channel_messages=other_channel_messages,
+            conversation_history=channel_messages,
+            target_thread_ts=message.thread_ts,
         )
 
         # Generate response
@@ -201,7 +212,9 @@ class AutonomousResponseUseCase:
             return
 
         # Save bot response message
-        bot_message = self._create_bot_message(response_text, message)
+        bot_message = create_bot_message(
+            response_text, message, self._bot_user_id, self._config.persona.name
+        )
         await self._message_repository.save(bot_message)
 
     async def _get_conversation_history(self, message: Message) -> list[Message]:
@@ -227,63 +240,6 @@ class AutonomousResponseUseCase:
                 channel_id=message.channel.id,
                 limit=self._config.response.message_limit,
             )
-
-    async def _build_other_channel_messages(
-        self, target_channel: Channel
-    ) -> dict[str, list[Message]]:
-        """Build other channel messages dict.
-
-        Collects recent messages from channels other than the target channel.
-
-        Args:
-            target_channel: The channel to exclude.
-
-        Returns:
-            Dict mapping channel names to their messages.
-        """
-        all_channels = await self._channel_monitor.get_channels()
-        other_channels = [ch for ch in all_channels if ch.id != target_channel.id]
-
-        result: dict[str, list[Message]] = {}
-
-        for channel in other_channels:
-            messages = await self._channel_monitor.get_recent_messages(
-                channel_id=channel.id,
-                limit=self._config.response.message_limit,
-            )
-
-            if messages:
-                result[channel.name] = messages
-
-        return result
-
-    def _create_bot_message(
-        self,
-        response_text: str,
-        original_message: Message,
-    ) -> Message:
-        """Create bot response message.
-
-        Args:
-            response_text: The response text.
-            original_message: The original message being replied to.
-
-        Returns:
-            Bot response Message.
-        """
-        return Message(
-            id=str(uuid.uuid4()),
-            channel=original_message.channel,
-            user=User(
-                id=self._bot_user_id,
-                name=self._config.persona.name,
-                is_bot=True,
-            ),
-            text=response_text,
-            timestamp=datetime.now(timezone.utc),
-            thread_ts=original_message.thread_ts,
-            mentions=[],
-        )
 
     async def _should_skip_judgment(self, message: Message) -> bool:
         """Check if judgment should be skipped based on cache.

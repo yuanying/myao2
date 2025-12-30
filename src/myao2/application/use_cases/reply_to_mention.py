@@ -1,9 +1,11 @@
 """Reply to mention use case."""
 
-from datetime import datetime, timezone
-
+from myao2.application.use_cases.helpers import (
+    build_channel_messages,
+    create_bot_message,
+)
 from myao2.config import PersonaConfig
-from myao2.domain.entities import Context, Message, User
+from myao2.domain.entities import Channel, Context, Message
 from myao2.domain.repositories import MessageRepository
 from myao2.domain.services import (
     ConversationHistoryService,
@@ -76,7 +78,9 @@ class ReplyToMentionUseCase:
         conversation_history = await self._get_conversation_history(message)
 
         # 5. Build Context
-        context = self._build_context(conversation_history)
+        context = self._build_context(
+            conversation_history, message.channel, message.thread_ts
+        )
 
         # 6. Generate response with context
         response_text = await self._response_generator.generate(
@@ -92,7 +96,9 @@ class ReplyToMentionUseCase:
         )
 
         # 8. Save response message
-        bot_message = self._create_bot_message(response_text, message)
+        bot_message = create_bot_message(
+            response_text, message, self._bot_user_id, self._persona.name
+        )
         await self._message_repository.save(bot_message)
 
     async def _get_conversation_history(self, message: Message) -> list[Message]:
@@ -121,44 +127,34 @@ class ReplyToMentionUseCase:
                 limit=20,
             )
 
-    def _build_context(self, conversation_history: list[Message]) -> Context:
+    def _build_context(
+        self,
+        conversation_history: list[Message],
+        channel: Channel,
+        thread_ts: str | None,
+    ) -> Context:
         """Build Context.
 
         Args:
             conversation_history: Conversation history.
+            channel: The channel.
+            thread_ts: The thread timestamp (None for top-level).
 
         Returns:
             Context instance.
         """
+        # TODO(task-08): Build proper ChannelMessages with full channel context
+        # Currently only includes thread or recent channel messages,
+        # not full channel structure.
+        # Task 08 will implement proper ChannelMessages construction with:
+        # - Full channel message structure (top-level + thread separation)
+        # - workspace_long_term_memory, workspace_short_term_memory
+        # - channel_memories with long/short term memories
+        # - thread_memories for recent thread summaries
+        channel_messages = build_channel_messages(conversation_history, channel)
+
         return Context(
             persona=self._persona,
-            conversation_history=conversation_history,
-        )
-
-    def _create_bot_message(
-        self,
-        response_text: str,
-        original_message: Message,
-    ) -> Message:
-        """Create bot response message.
-
-        Args:
-            response_text: Response text.
-            original_message: Original message.
-
-        Returns:
-            Bot response Message.
-        """
-        return Message(
-            id=str(datetime.now(timezone.utc).timestamp()),  # Temporary ID
-            channel=original_message.channel,
-            user=User(
-                id=self._bot_user_id,
-                name=self._persona.name,
-                is_bot=True,
-            ),
-            text=response_text,
-            timestamp=datetime.now(timezone.utc),
-            thread_ts=original_message.thread_ts,
-            mentions=[],
+            conversation_history=channel_messages,
+            target_thread_ts=thread_ts,
         )
