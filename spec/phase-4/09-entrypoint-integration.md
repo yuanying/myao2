@@ -61,6 +61,7 @@ async def main() -> None:
         channel_repository=channel_repository,
         memory_summarizer=memory_summarizer,
         config=config.memory,
+        persona=config.persona,
     )
 
     # BackgroundMemoryGenerator
