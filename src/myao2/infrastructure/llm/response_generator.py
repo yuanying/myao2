@@ -6,7 +6,6 @@ from myao2.domain.entities import Context, Message
 from myao2.domain.services.message_formatter import (
     format_conversation_history,
     format_message_with_metadata,
-    format_other_channels,
 )
 from myao2.infrastructure.llm.client import LLMClient
 
@@ -80,19 +79,14 @@ class LiteLLMResponseGenerator:
         """
         parts = [context.persona.system_prompt]
 
-        # Add conversation history
+        # Add conversation history (interim: use get_all_messages() for compatibility)
+        all_messages = context.conversation_history.get_all_messages()
         parts.append("\n\n## 会話履歴")
-        parts.append(format_conversation_history(context.conversation_history))
+        parts.append(format_conversation_history(all_messages))
 
         # Add current message to respond to
         parts.append("\n\n## 返答すべきメッセージ")
         parts.append(format_message_with_metadata(current_message))
-
-        # Add other channel messages if present
-        other_channels = format_other_channels(context.other_channel_messages)
-        if other_channels:
-            parts.append("\n\n## 他のチャンネルでの最近の会話")
-            parts.append(other_channels)
 
         # Add instruction
         parts.append("\n\n---")

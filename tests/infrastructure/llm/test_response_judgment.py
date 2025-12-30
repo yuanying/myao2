@@ -7,6 +7,7 @@ import pytest
 
 from myao2.config.models import PersonaConfig
 from myao2.domain.entities import Channel, Context, Message, User
+from myao2.domain.entities.channel_messages import ChannelMessages
 from myao2.infrastructure.llm import LLMClient, LLMError
 from myao2.infrastructure.llm.response_judgment import LLMResponseJudgment
 
@@ -70,12 +71,19 @@ def sample_message(
     )
 
 
+def create_empty_channel_messages(
+    channel_id: str = "C123", channel_name: str = "general"
+) -> ChannelMessages:
+    """Create an empty ChannelMessages instance."""
+    return ChannelMessages(channel_id=channel_id, channel_name=channel_name)
+
+
 @pytest.fixture
 def sample_context(persona_config: PersonaConfig) -> Context:
     """Create test context with empty history."""
     return Context(
         persona=persona_config,
-        conversation_history=[],
+        conversation_history=create_empty_channel_messages(),
     )
 
 
@@ -477,9 +485,14 @@ class TestLLMResponseJudgmentMultipleMessages:
             mentions=[],
         )
 
+        channel_messages = ChannelMessages(
+            channel_id=sample_channel.id,
+            channel_name=sample_channel.name,
+            top_level_messages=history_messages,
+        )
         context = Context(
             persona=persona_config,
-            conversation_history=history_messages,
+            conversation_history=channel_messages,
         )
 
         await judgment.judge(context, target)

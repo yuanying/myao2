@@ -7,6 +7,7 @@ import pytest
 
 from myao2.config.models import PersonaConfig
 from myao2.domain.entities import Channel, Context, Message, User
+from myao2.domain.entities.channel_messages import ChannelMessages
 from myao2.infrastructure.llm import LiteLLMResponseGenerator, LLMClient, LLMError
 
 
@@ -73,12 +74,19 @@ def user_message(
     )
 
 
+def create_empty_channel_messages(
+    channel_id: str = "C123", channel_name: str = "general"
+) -> ChannelMessages:
+    """Create an empty ChannelMessages instance."""
+    return ChannelMessages(channel_id=channel_id, channel_name=channel_name)
+
+
 @pytest.fixture
 def sample_context(persona_config: PersonaConfig) -> Context:
     """Create test context with no history."""
     return Context(
         persona=persona_config,
-        conversation_history=[],
+        conversation_history=create_empty_channel_messages(),
     )
 
 
@@ -193,9 +201,14 @@ class TestLiteLLMResponseGenerator:
                 mentions=[],
             ),
         ]
+        channel_messages = ChannelMessages(
+            channel_id=sample_channel.id,
+            channel_name=sample_channel.name,
+            top_level_messages=history,
+        )
         context = Context(
             persona=persona_config,
-            conversation_history=history,
+            conversation_history=channel_messages,
         )
 
         await generator.generate(
@@ -213,49 +226,6 @@ class TestLiteLLMResponseGenerator:
         assert "会話履歴" in system_content
         assert "testuser: Hi there!" in system_content
         assert "myao: Hello! How can I help?" in system_content
-
-    async def test_generate_includes_other_channel_messages(
-        self,
-        generator: LiteLLMResponseGenerator,
-        mock_client: MagicMock,
-        user_message: Message,
-        persona_config: PersonaConfig,
-        sample_user: User,
-        timestamp: datetime,
-    ) -> None:
-        """Test that other channel messages are included in system prompt."""
-        random_channel = Channel(id="C456", name="random")
-        other_messages = {
-            "random": [
-                Message(
-                    id="msg001",
-                    channel=random_channel,
-                    user=sample_user,
-                    text="今日は暑いね",
-                    timestamp=timestamp,
-                    thread_ts=None,
-                    mentions=[],
-                ),
-            ],
-        }
-        context = Context(
-            persona=persona_config,
-            conversation_history=[],
-            other_channel_messages=other_messages,
-        )
-
-        await generator.generate(
-            user_message=user_message,
-            context=context,
-        )
-
-        call_args = mock_client.complete.call_args
-        messages = call_args.args[0]
-        system_content = messages[0]["content"]
-
-        assert "他のチャンネルでの最近の会話" in system_content
-        assert "#random" in system_content
-        assert "今日は暑いね" in system_content
 
     async def test_generate_includes_instruction_at_end(
         self,
@@ -293,21 +263,3 @@ class TestLiteLLMResponseGenerator:
                 context=sample_context,
             )
 
-    async def test_generate_no_other_channels_section_when_empty(
-        self,
-        generator: LiteLLMResponseGenerator,
-        mock_client: MagicMock,
-        user_message: Message,
-        sample_context: Context,
-    ) -> None:
-        """Test that other channels section is not included when empty."""
-        await generator.generate(
-            user_message=user_message,
-            context=sample_context,
-        )
-
-        call_args = mock_client.complete.call_args
-        messages = call_args.args[0]
-        system_content = messages[0]["content"]
-
-        assert "他のチャンネルでの最近の会話" not in system_content
