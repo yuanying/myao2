@@ -1,8 +1,10 @@
 # 08: ResponseGenerator への記憶組み込み
 
+> **注意**: この設計書は [04a-channel-messages-and-context.md](./04a-channel-messages-and-context.md) の変更に伴い更新されました。
+
 ## 目的
 
-LiteLLMResponseGenerator を拡張し、記憶を system prompt に含める。
+LiteLLMResponseGenerator を拡張し、記憶とチャンネル情報を system prompt に含める。
 
 ---
 
@@ -10,14 +12,14 @@ LiteLLMResponseGenerator を拡張し、記憶を system prompt に含める。
 
 | ファイル | 説明 |
 |---------|------|
-| `src/myao2/infrastructure/llm/response_generator.py` | 記憶組み込み（修正） |
-| `tests/infrastructure/llm/test_response_generator.py` | 記憶組み込みテスト追加（修正） |
+| `src/myao2/infrastructure/llm/response_generator.py` | 記憶・チャンネル情報組み込み（修正） |
+| `tests/infrastructure/llm/test_response_generator.py` | テスト追加（修正） |
 
 ---
 
 ## 依存関係
 
-- タスク 04（Context への記憶フィールド追加）に依存
+- タスク 04a（ChannelMessages と Context の構造変更）に依存
 - タスク 06（GenerateMemoryUseCase）に依存（記憶が生成されていること）
 
 ---
@@ -38,72 +40,53 @@ def _build_system_prompt(
     # 1. ペルソナ
     parts.append(context.persona.system_prompt)
 
-    # 2. 長期記憶（新規追加）
-    memory_section = self._build_memory_section(context)
-    if memory_section:
-        parts.append(memory_section)
+    # 2. ワークスペース記憶
+    workspace_memory = self._build_workspace_memory_section(context)
+    if workspace_memory:
+        parts.append(workspace_memory)
 
-    # 3. 会話履歴
-    if context.conversation_history:
-        parts.append("## 会話履歴")
-        parts.append(self._format_conversation_history(context.conversation_history))
+    # 3. チャンネル一覧
+    channel_list = self._build_channel_list_section(context)
+    if channel_list:
+        parts.append(channel_list)
 
-    # 4. 返答すべきメッセージ
-    parts.append("## 返答すべきメッセージ")
-    parts.append(self._format_message_with_metadata(user_message))
+    # 4. 各チャンネルの記憶
+    channel_memories = self._build_channel_memories_section(context)
+    if channel_memories:
+        parts.append(channel_memories)
 
-    # 5. 他チャンネルのメッセージ
-    if context.other_channel_messages:
-        parts.append("## 他のチャンネルでの最近の会話")
-        parts.append(self._format_other_channels(context.other_channel_messages))
+    # 5. スレッド一覧と要約
+    thread_memories = self._build_thread_memories_section(context)
+    if thread_memories:
+        parts.append(thread_memories)
 
-    # 6. 指示
+    # 6. 現在の会話
+    current_conversation = self._build_current_conversation_section(context)
+    parts.append(current_conversation)
+
+    # 7. 指示
     parts.append("---")
     parts.append(
-        "上記の情報を元に、「返答すべきメッセージ」に対して自然な返答を生成してください。"
+        "上記の情報をもとに、現在の会話に返答してください。"
     )
 
     return "\n\n".join(parts)
 ```
 
-### _build_memory_section メソッド
+### _build_workspace_memory_section メソッド
 
 ```python
-def _build_memory_section(self, context: Context) -> str | None:
-    """記憶セクションを構築する
-
-    Args:
-        context: コンテキスト
-
-    Returns:
-        記憶セクションの文字列、または記憶がない場合は None
-    """
+def _build_workspace_memory_section(self, context: Context) -> str | None:
+    """ワークスペース記憶セクションを構築する"""
     sections: list[str] = []
 
-    # ワークスペースの長期記憶
     if context.workspace_long_term_memory:
         sections.append("### ワークスペースの歴史")
         sections.append(context.workspace_long_term_memory)
 
-    # ワークスペースの短期記憶
     if context.workspace_short_term_memory:
         sections.append("### ワークスペースの最近の出来事")
         sections.append(context.workspace_short_term_memory)
-
-    # チャンネルの長期記憶
-    if context.channel_long_term_memory:
-        sections.append("### このチャンネルの歴史")
-        sections.append(context.channel_long_term_memory)
-
-    # チャンネルの短期記憶
-    if context.channel_short_term_memory:
-        sections.append("### このチャンネルの最近の出来事")
-        sections.append(context.channel_short_term_memory)
-
-    # スレッドの記憶
-    if context.thread_memory:
-        sections.append("### このスレッドの要約")
-        sections.append(context.thread_memory)
 
     if not sections:
         return None
@@ -111,11 +94,105 @@ def _build_memory_section(self, context: Context) -> str | None:
     return "## 記憶\n\n" + "\n\n".join(sections)
 ```
 
+### _build_channel_list_section メソッド
+
+```python
+def _build_channel_list_section(self, context: Context) -> str | None:
+    """チャンネル一覧セクションを構築する"""
+    if not context.channel_memories:
+        return None
+
+    lines: list[str] = ["## チャンネル情報", ""]
+    lines.append("あなたが参加しているチャンネルは以下です。")
+    lines.append("")
+
+    for channel_memory in context.channel_memories.values():
+        lines.append(f"- #{channel_memory.channel_name}")
+
+    lines.append("")
+    lines.append(
+        f"現在、あなたは #{context.conversation_history.channel_name} にいます。"
+    )
+
+    return "\n".join(lines)
+```
+
+### _build_channel_memories_section メソッド
+
+```python
+def _build_channel_memories_section(self, context: Context) -> str | None:
+    """各チャンネルの記憶セクションを構築する"""
+    if not context.channel_memories:
+        return None
+
+    sections: list[str] = ["## 各チャンネルの記憶"]
+
+    for channel_memory in context.channel_memories.values():
+        if not channel_memory.long_term_memory and not channel_memory.short_term_memory:
+            continue
+
+        sections.append(f"### #{channel_memory.channel_name}")
+
+        if channel_memory.long_term_memory:
+            sections.append("#### 歴史")
+            sections.append(channel_memory.long_term_memory)
+
+        if channel_memory.short_term_memory:
+            sections.append("#### 最近の出来事")
+            sections.append(channel_memory.short_term_memory)
+
+    if len(sections) == 1:  # ヘッダーのみ
+        return None
+
+    return "\n\n".join(sections)
+```
+
+### _build_thread_memories_section メソッド
+
+```python
+def _build_thread_memories_section(self, context: Context) -> str | None:
+    """スレッド一覧と要約セクションを構築する"""
+    if not context.thread_memories:
+        return None
+
+    sections: list[str] = ["## 現在のスレッド一覧"]
+
+    for thread_ts, memory in context.thread_memories.items():
+        sections.append(f"### スレッド: {thread_ts}")
+        sections.append(memory)
+
+    return "\n\n".join(sections)
+```
+
+### _build_current_conversation_section メソッド
+
+```python
+def _build_current_conversation_section(self, context: Context) -> str:
+    """現在の会話セクションを構築する"""
+    channel_messages = context.conversation_history
+    sections: list[str] = ["## 現在の会話"]
+    sections.append(f"### #{channel_messages.channel_name}")
+
+    if context.target_thread_ts:
+        # スレッドが対象
+        sections.append(f"#### スレッド: {context.target_thread_ts}")
+        thread_msgs = channel_messages.get_thread(context.target_thread_ts)
+        for msg in thread_msgs:
+            sections.append(self._format_message_with_metadata(msg))
+    else:
+        # トップレベルが対象
+        sections.append("#### トップレベルメッセージ")
+        for msg in channel_messages.top_level_messages:
+            sections.append(self._format_message_with_metadata(msg))
+
+    return "\n\n".join(sections)
+```
+
 ---
 
-## System Prompt 構成
+## System Prompt 構成（新）
 
-### 記憶あり
+### 完全な記憶あり
 
 ```
 {persona.system_prompt}
@@ -128,44 +205,71 @@ def _build_memory_section(self, context: Context) -> str | None:
 ### ワークスペースの最近の出来事
 {workspace_short_term_memory}
 
-### このチャンネルの歴史
-{channel_long_term_memory}
+## チャンネル情報
 
-### このチャンネルの最近の出来事
-{channel_short_term_memory}
+あなたが参加しているチャンネルは以下です。
 
-### このスレッドの要約
-{thread_memory}
+- #general
+- #random
+- #dev
 
-## 会話履歴
-{conversation_history}
+現在、あなたは #general にいます。
 
-## 返答すべきメッセージ
-{current_message}
+## 各チャンネルの記憶
 
-## 他のチャンネルでの最近の会話
-{other_channels}
+### #general
+
+#### 歴史
+{general_long_term_memory}
+
+#### 最近の出来事
+{general_short_term_memory}
+
+### #random
+
+#### 歴史
+{random_long_term_memory}
+
+## 現在のスレッド一覧
+
+### スレッド: 1234567890.000000
+{thread_summary_1}
+
+### スレッド: 1234567891.000000
+{thread_summary_2}
+
+## 現在の会話
+
+### #general
+
+#### スレッド: 1234567890.000000
+
+**2024-01-01 12:00:00** user1:
+メッセージ1
+
+**2024-01-01 12:01:00** user2:
+メッセージ2
 
 ---
-上記の情報を元に、「返答すべきメッセージ」に対して自然な返答を生成してください。
+上記の情報をもとに、現在の会話に返答してください。
 ```
 
-### 記憶なし（従来通り）
+### 記憶なし（従来互換）
 
 ```
 {persona.system_prompt}
 
-## 会話履歴
-{conversation_history}
+## 現在の会話
 
-## 返答すべきメッセージ
-{current_message}
+### #general
 
-## 他のチャンネルでの最近の会話
-{other_channels}
+#### トップレベルメッセージ
+
+**2024-01-01 12:00:00** user1:
+メッセージ1
 
 ---
-上記の情報を元に、「返答すべきメッセージ」に対して自然な返答を生成してください。
+上記の情報をもとに、現在の会話に返答してください。
 ```
 
 ---
@@ -176,9 +280,10 @@ System prompt に含める記憶の順序：
 
 1. **ワークスペースの長期記憶** - 最も広いコンテキスト
 2. **ワークスペースの短期記憶** - ワークスペース全体の直近の状況
-3. **チャンネルの長期記憶** - このチャンネルの歴史
-4. **チャンネルの短期記憶** - このチャンネルの直近の状況
-5. **スレッドの記憶** - 最も具体的なコンテキスト
+3. **チャンネル一覧** - 参加チャンネルの把握
+4. **各チャンネルの記憶** - チャンネルごとの歴史と直近の状況
+5. **スレッド一覧と要約** - 現在進行中のスレッド
+6. **現在の会話** - 返答対象の具体的なメッセージ
 
 この順序により、LLM は広いコンテキストから狭いコンテキストへと理解を深められる。
 
@@ -194,8 +299,8 @@ System prompt に含める記憶の順序：
 
 ### 後方互換性
 
-- 記憶フィールドが None の場合は従来の動作
-- 既存のテストが引き続き通過する必要がある
+- **破壊的変更**: Context の構造が変わるため、既存コードの修正が必要
+- 新しい Context 構造に対応した実装が必要
 
 ### ログ
 
@@ -205,28 +310,49 @@ System prompt に含める記憶の順序：
 
 ## テストケース
 
-### _build_memory_section
+### _build_workspace_memory_section
 
 | テスト | シナリオ | 期待結果 |
 |--------|---------|---------|
-| 全記憶あり | 5つの記憶すべて設定 | 全記憶がセクションに含まれる |
-| 部分記憶 | 一部の記憶のみ設定 | 設定された記憶のみ含まれる |
-| 記憶なし | 全記憶が None | None が返る |
+| 両方あり | 長期・短期記憶あり | 両方がセクションに含まれる |
+| 長期のみ | 長期記憶のみ | 長期記憶のみ含まれる |
+| 記憶なし | 両方 None | None が返る |
+
+### _build_channel_list_section
+
+| テスト | シナリオ | 期待結果 |
+|--------|---------|---------|
+| 複数チャンネル | 3チャンネル分の記憶 | 全チャンネルがリストに含まれる |
+| チャンネルなし | channel_memories が空 | None が返る |
+
+### _build_channel_memories_section
+
+| テスト | シナリオ | 期待結果 |
+|--------|---------|---------|
+| 複数チャンネル | 各チャンネルに記憶 | 全チャンネルの記憶が含まれる |
+| 一部のみ | 一部のチャンネルのみ記憶 | 記憶があるチャンネルのみ含まれる |
+| 記憶なし | channel_memories が空 | None が返る |
+
+### _build_thread_memories_section
+
+| テスト | シナリオ | 期待結果 |
+|--------|---------|---------|
+| 複数スレッド | 3スレッド分の要約 | 全スレッドが含まれる |
+| スレッドなし | thread_memories が空 | None が返る |
+
+### _build_current_conversation_section
+
+| テスト | シナリオ | 期待結果 |
+|--------|---------|---------|
+| スレッド対象 | target_thread_ts 設定 | スレッドメッセージが表示 |
+| トップレベル対象 | target_thread_ts が None | トップレベルメッセージが表示 |
 
 ### _build_system_prompt
 
 | テスト | シナリオ | 期待結果 |
 |--------|---------|---------|
-| 記憶あり | 記憶フィールドが設定 | 記憶セクションが prompt に含まれる |
-| 記憶なし | 記憶フィールドが None | 記憶セクションが含まれない |
-| 後方互換 | 従来の Context | 従来通りの prompt |
-
-### generate
-
-| テスト | シナリオ | 期待結果 |
-|--------|---------|---------|
-| 記憶あり生成 | 記憶を含む Context | 記憶を考慮した応答 |
-| 記憶なし生成 | 記憶なしの Context | 従来通りの応答 |
+| 全記憶あり | 全フィールド設定 | 全セクションが prompt に含まれる |
+| 記憶なし | 記憶フィールドが空 | 現在の会話のみ含まれる |
 
 ---
 
@@ -239,10 +365,9 @@ System prompt に含める記憶の順序：
 ```python
 async def _build_context_with_memory(
     self,
-    channel_id: str,
+    channel: Channel,
     thread_ts: str | None,
-    conversation_history: list[Message],
-    other_channel_messages: dict[str, list[Message]],
+    channel_messages: ChannelMessages,
 ) -> Context:
     """記憶を含む Context を構築する"""
     # ワークスペース記憶を取得
@@ -257,48 +382,91 @@ async def _build_context_with_memory(
         MemoryType.SHORT_TERM,
     )
 
-    # チャンネル記憶を取得
-    ch_long_term = await self._memory_repository.find_by_scope_and_type(
-        MemoryScope.CHANNEL,
-        channel_id,
-        MemoryType.LONG_TERM,
-    )
-    ch_short_term = await self._memory_repository.find_by_scope_and_type(
-        MemoryScope.CHANNEL,
-        channel_id,
-        MemoryType.SHORT_TERM,
-    )
+    # アクティブなチャンネルの記憶を取得
+    channel_memories = await self._build_channel_memories()
 
-    # スレッド記憶を取得（スレッドの場合のみ）
-    thread_memory = None
-    if thread_ts:
-        scope_id = make_thread_scope_id(channel_id, thread_ts)
-        thread_mem = await self._memory_repository.find_by_scope_and_type(
-            MemoryScope.THREAD,
-            scope_id,
-            MemoryType.SHORT_TERM,
-        )
-        thread_memory = thread_mem.content if thread_mem else None
+    # 直近のスレッド記憶を取得
+    thread_memories = await self._build_thread_memories(channel.id)
 
     return Context(
         persona=self._persona_config,
-        conversation_history=conversation_history,
-        other_channel_messages=other_channel_messages,
+        conversation_history=channel_messages,
         workspace_long_term_memory=ws_long_term.content if ws_long_term else None,
         workspace_short_term_memory=ws_short_term.content if ws_short_term else None,
-        channel_long_term_memory=ch_long_term.content if ch_long_term else None,
-        channel_short_term_memory=ch_short_term.content if ch_short_term else None,
-        thread_memory=thread_memory,
+        channel_memories=channel_memories,
+        thread_memories=thread_memories,
+        target_thread_ts=thread_ts,
     )
+
+async def _build_channel_memories(self) -> dict[str, ChannelMemory]:
+    """アクティブなチャンネルの記憶を構築する"""
+    channel_memories: dict[str, ChannelMemory] = {}
+
+    # アクティブなチャンネルを取得（active_channel_days 以内にメッセージがあるチャンネル）
+    active_channels = await self._get_active_channels()
+
+    for channel in active_channels:
+        long_term = await self._memory_repository.find_by_scope_and_type(
+            MemoryScope.CHANNEL,
+            channel.id,
+            MemoryType.LONG_TERM,
+        )
+        short_term = await self._memory_repository.find_by_scope_and_type(
+            MemoryScope.CHANNEL,
+            channel.id,
+            MemoryType.SHORT_TERM,
+        )
+
+        channel_memories[channel.id] = ChannelMemory(
+            channel_id=channel.id,
+            channel_name=channel.name,
+            long_term_memory=long_term.content if long_term else None,
+            short_term_memory=short_term.content if short_term else None,
+        )
+
+    return channel_memories
+
+async def _build_thread_memories(self, channel_id: str) -> dict[str, str]:
+    """直近のスレッド記憶を構築する"""
+    thread_memories: dict[str, str] = {}
+
+    # thread_memory_days 以内のスレッド記憶を取得
+    memories = await self._memory_repository.find_recent_thread_memories(
+        channel_id=channel_id,
+        days=self._response_config.thread_memory_days,
+    )
+
+    for memory in memories:
+        _, thread_ts = parse_thread_scope_id(memory.scope_id)
+        thread_memories[thread_ts] = memory.content
+
+    return thread_memories
+```
+
+---
+
+## JudgeResponse のプロンプト
+
+JudgeResponse では、プロンプトの最後の指示部分を以下のように変更：
+
+```python
+# 応答生成用
+"上記の情報をもとに、現在の会話に返答してください。"
+
+# 判断用（JudgeResponse）
+"上記の情報を元に、この会話に返答すべきかどうかを判断してください。"
 ```
 
 ---
 
 ## 完了基準
 
-- [ ] _build_memory_section メソッドが実装されている
-- [ ] _build_system_prompt で記憶セクションが含まれる
-- [ ] 記憶の順序が正しい
-- [ ] 記憶がない場合は従来通りの動作
-- [ ] 既存のテストが引き続き通過する
+- [ ] _build_workspace_memory_section メソッドが実装されている
+- [ ] _build_channel_list_section メソッドが実装されている
+- [ ] _build_channel_memories_section メソッドが実装されている
+- [ ] _build_thread_memories_section メソッドが実装されている
+- [ ] _build_current_conversation_section メソッドが実装されている
+- [ ] _build_system_prompt で全セクションが正しく構築される
+- [ ] 記憶の順序が正しい（広いスコープ → 狭いスコープ）
+- [ ] 記憶がない場合は現在の会話のみ表示される
 - [ ] 新しいテストケースが通過する

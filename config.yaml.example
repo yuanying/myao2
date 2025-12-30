@@ -27,6 +27,9 @@ response:
   min_wait_seconds: 300  # 最低待機時間（誰も反応しない場合）
   message_limit: 20  # チャンネル監視時の取得メッセージ数上限
   max_message_age_seconds: 43200  # 最大メッセージ経過時間（12時間）、これより古いメッセージは対象外
+  channel_messages_limit: 50  # ChannelMessages に含める全体のメッセージ数上限
+  active_channel_days: 7  # アクティブなチャンネルとして判定する日数
+  thread_memory_days: 7  # スレッド記憶を保持する日数
   # 判定スキップ設定（LLM呼び出し削減のため）
   judgment_skip:
     enabled: true
