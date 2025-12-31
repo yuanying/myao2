@@ -57,6 +57,16 @@ class GenerateMemoryUseCase:
         self._config = config
         self._persona = persona
 
+    def _get_short_term_window_start(self) -> datetime:
+        """Get the start time of the short-term window.
+
+        Returns:
+            datetime marking the start of the short-term window.
+        """
+        return datetime.now(timezone.utc) - timedelta(
+            hours=self._config.short_term_window_hours
+        )
+
     async def execute(self) -> None:
         """Generate all memories.
 
@@ -70,14 +80,17 @@ class GenerateMemoryUseCase:
         logger.info("Starting memory generation")
 
         # Generate channel memories
-        channel_memories = await self.generate_channel_memories()
+        (
+            channel_memories,
+            any_channel_regenerated,
+        ) = await self.generate_channel_memories()
 
         if not channel_memories:
             logger.info("No channels found, skipping workspace memory generation")
             return
 
         # Generate workspace memories
-        await self.generate_workspace_memory(channel_memories)
+        await self.generate_workspace_memory(channel_memories, any_channel_regenerated)
 
         # Generate thread memories for active threads
         channels = await self._channel_repository.find_all()
@@ -102,26 +115,38 @@ class GenerateMemoryUseCase:
 
         logger.info("Memory generation completed")
 
-    async def generate_channel_memories(self) -> dict[str, ChannelMemory]:
+    async def generate_channel_memories(
+        self,
+    ) -> tuple[dict[str, ChannelMemory], bool]:
         """Generate memories for all channels.
 
         Returns:
-            Map of channel_id to ChannelMemory.
+            Tuple of (channel_memories, any_channel_regenerated).
+            - channel_memories: Map of channel_id to ChannelMemory.
+            - any_channel_regenerated: True if any channel memory was regenerated.
         """
         logger.info("Generating channel memories")
         channel_memories: dict[str, ChannelMemory] = {}
+        any_channel_regenerated = False
 
         channels = await self._channel_repository.find_all()
         for channel in channels:
             try:
                 # Generate short-term memory
-                short_term = await self._generate_channel_short_term_memory(
+                (
+                    short_term,
+                    short_term_regenerated,
+                ) = await self._generate_channel_short_term_memory(
                     channel.id, channel.name
                 )
 
+                # Track if any channel was regenerated
+                if short_term_regenerated:
+                    any_channel_regenerated = True
+
                 # Generate long-term memory
                 long_term = await self._generate_channel_long_term_memory(
-                    channel.id, channel.name, short_term
+                    channel.id, channel.name, short_term, short_term_regenerated
                 )
 
                 # Build ChannelMemory
@@ -147,18 +172,28 @@ class GenerateMemoryUseCase:
                     channel_name=channel.name,
                 )
 
-        return channel_memories
+        return channel_memories, any_channel_regenerated
 
     async def generate_workspace_memory(
         self,
         channel_memories: dict[str, ChannelMemory],
+        any_channel_regenerated: bool = True,
     ) -> None:
         """Generate workspace memory.
 
         Args:
             channel_memories: Channel memories to integrate.
+            any_channel_regenerated: Whether any channel memory was regenerated.
+                If False, skip generation and keep existing memory.
         """
         logger.info("Generating workspace memory")
+
+        # Skip if no channel was regenerated
+        if not any_channel_regenerated:
+            logger.debug(
+                "Skipping workspace memory generation (no channel regenerated)"
+            )
+            return
 
         # Get existing long-term memory
         existing_long_term = await self._memory_repository.find_by_scope_and_type(
@@ -235,6 +270,23 @@ class GenerateMemoryUseCase:
         if not messages:
             return
 
+        # Get latest message ts
+        latest_message_ts = max(msg.id for msg in messages)
+
+        # Check existing memory for incremental update
+        scope_id = make_thread_scope_id(channel_id, thread_ts)
+        existing = await self._memory_repository.find_by_scope_and_type(
+            MemoryScope.THREAD, scope_id, MemoryType.SHORT_TERM
+        )
+
+        # Skip if no new messages
+        if existing and existing.source_latest_message_ts == latest_message_ts:
+            logger.debug(
+                "Skipping thread %s memory generation (no new messages)",
+                thread_ts,
+            )
+            return
+
         # Get channel info
         channel = await self._channel_repository.find_by_id(channel_id)
         channel_name = channel.name if channel else ""
@@ -266,19 +318,20 @@ class GenerateMemoryUseCase:
         )
 
         if content:
-            scope_id = make_thread_scope_id(channel_id, thread_ts)
             await self._save_memory(
                 MemoryScope.THREAD,
                 scope_id,
                 MemoryType.SHORT_TERM,
                 content,
+                source_message_count=len(messages),
+                source_latest_message_ts=latest_message_ts,
             )
 
     async def _generate_channel_short_term_memory(
         self,
         channel_id: str,
         channel_name: str,
-    ) -> str | None:
+    ) -> tuple[str | None, bool]:
         """Generate channel short-term memory.
 
         Args:
@@ -286,12 +339,12 @@ class GenerateMemoryUseCase:
             channel_name: Channel name.
 
         Returns:
-            Generated memory content or None.
+            Tuple of (content, was_regenerated).
+            - content: Generated memory content or None.
+            - was_regenerated: True if memory was regenerated, False if skipped.
         """
         # Get messages within time window
-        since = datetime.now(timezone.utc) - timedelta(
-            hours=self._config.short_term_window_hours
-        )
+        since = self._get_short_term_window_start()
         messages = await self._message_repository.find_by_channel_since(
             channel_id=channel_id,
             since=since,
@@ -299,7 +352,23 @@ class GenerateMemoryUseCase:
         )
 
         if not messages:
-            return None
+            return None, False
+
+        # Get latest message ts
+        latest_message_ts = max(msg.id for msg in messages)
+
+        # Check existing memory for incremental update
+        existing = await self._memory_repository.find_by_scope_and_type(
+            MemoryScope.CHANNEL, channel_id, MemoryType.SHORT_TERM
+        )
+
+        # Skip if no new messages
+        if existing and existing.source_latest_message_ts == latest_message_ts:
+            logger.debug(
+                "Skipping channel %s short-term memory generation (no new messages)",
+                channel_id,
+            )
+            return existing.content, False
 
         # Build ChannelMessages
         channel_messages = self._build_channel_messages(
@@ -325,15 +394,18 @@ class GenerateMemoryUseCase:
                 channel_id,
                 MemoryType.SHORT_TERM,
                 content,
+                source_message_count=len(messages),
+                source_latest_message_ts=latest_message_ts,
             )
 
-        return content or None
+        return content or None, True
 
     async def _generate_channel_long_term_memory(
         self,
         channel_id: str,
         channel_name: str,
         short_term_memory: str | None,
+        short_term_regenerated: bool,
     ) -> str | None:
         """Generate channel long-term memory.
 
@@ -341,18 +413,26 @@ class GenerateMemoryUseCase:
             channel_id: Channel ID.
             channel_name: Channel name.
             short_term_memory: Short-term memory to merge.
+            short_term_regenerated: Whether short-term memory was regenerated.
 
         Returns:
             Generated memory content or None.
         """
+        # If there's no short-term memory content to merge, keep existing long-term
         if not short_term_memory:
-            # Keep existing long-term memory when no short-term
             existing = await self._memory_repository.find_by_scope_and_type(
                 MemoryScope.CHANNEL, channel_id, MemoryType.LONG_TERM
             )
             return existing.content if existing else None
 
-        # Get existing long-term memory
+        # If short-term memory exists but was not regenerated, keep existing long-term
+        if not short_term_regenerated:
+            existing = await self._memory_repository.find_by_scope_and_type(
+                MemoryScope.CHANNEL, channel_id, MemoryType.LONG_TERM
+            )
+            return existing.content if existing else None
+
+        # Get existing long-term memory for incremental update
         existing = await self._memory_repository.find_by_scope_and_type(
             MemoryScope.CHANNEL, channel_id, MemoryType.LONG_TERM
         )
@@ -437,9 +517,7 @@ class GenerateMemoryUseCase:
         Returns:
             List of thread timestamps.
         """
-        since = datetime.now(timezone.utc) - timedelta(
-            hours=self._config.short_term_window_hours
-        )
+        since = self._get_short_term_window_start()
         messages = await self._message_repository.find_by_channel_since(
             channel_id=channel_id,
             since=since,
@@ -459,6 +537,8 @@ class GenerateMemoryUseCase:
         scope_id: str,
         memory_type: MemoryType,
         content: str | None,
+        source_message_count: int = 0,
+        source_latest_message_ts: str | None = None,
     ) -> None:
         """Save memory to repository.
 
@@ -467,6 +547,8 @@ class GenerateMemoryUseCase:
             scope_id: Scope-specific ID.
             memory_type: Memory type.
             content: Memory content.
+            source_message_count: Number of messages used for generation.
+            source_latest_message_ts: Latest message timestamp used for generation.
         """
         if not content:
             return
@@ -476,6 +558,7 @@ class GenerateMemoryUseCase:
             scope_id=scope_id,
             memory_type=memory_type,
             content=content,
-            source_message_count=0,
+            source_message_count=source_message_count,
+            source_latest_message_ts=source_latest_message_ts,
         )
         await self._memory_repository.save(memory)
