@@ -1,12 +1,11 @@
 """LLM response generator."""
 
 import logging
+from datetime import datetime
+
+from jinja2 import Environment, PackageLoader, select_autoescape
 
 from myao2.domain.entities import Context, Message
-from myao2.domain.services.message_formatter import (
-    format_conversation_history,
-    format_message_with_metadata,
-)
 from myao2.infrastructure.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -33,6 +32,35 @@ class LiteLLMResponseGenerator:
         """
         self._client = client
         self._debug_llm_messages = debug_llm_messages
+        self._jinja_env = self._create_jinja_env()
+        self._template = self._jinja_env.get_template("system_prompt.j2")
+
+    def _create_jinja_env(self) -> Environment:
+        """Create Jinja2 environment.
+
+        Returns:
+            Configured Jinja2 environment.
+        """
+        env = Environment(
+            loader=PackageLoader("myao2.infrastructure.llm", "templates"),
+            autoescape=select_autoescape(),
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+        env.filters["format_timestamp"] = self._format_timestamp
+        return env
+
+    @staticmethod
+    def _format_timestamp(timestamp: datetime) -> str:
+        """Format datetime to readable string.
+
+        Args:
+            timestamp: datetime object.
+
+        Returns:
+            Formatted string in YYYY-MM-DD HH:MM:SS format.
+        """
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
     async def generate(
         self,
@@ -70,6 +98,8 @@ class LiteLLMResponseGenerator:
     def _build_system_prompt(self, context: Context, current_message: Message) -> str:
         """Build system prompt from context and current message.
 
+        Uses Jinja2 template to construct the prompt with memory integration.
+
         Args:
             context: Conversation context.
             current_message: Current user message to respond to.
@@ -77,25 +107,30 @@ class LiteLLMResponseGenerator:
         Returns:
             Complete system prompt string.
         """
-        parts = [context.persona.system_prompt]
+        channel_messages = context.conversation_history
 
-        # Add conversation history (interim: use get_all_messages() for compatibility)
-        all_messages = context.conversation_history.get_all_messages()
-        parts.append("\n\n## 会話履歴")
-        parts.append(format_conversation_history(all_messages))
+        # Get target thread messages
+        if context.target_thread_ts:
+            target_thread_messages = channel_messages.get_thread(
+                context.target_thread_ts
+            )
+        else:
+            target_thread_messages = channel_messages.top_level_messages
 
-        # Add current message to respond to
-        parts.append("\n\n## 返答すべきメッセージ")
-        parts.append(format_message_with_metadata(current_message))
+        # Build template context
+        template_context = {
+            "persona": context.persona,
+            "workspace_long_term_memory": context.workspace_long_term_memory,
+            "workspace_short_term_memory": context.workspace_short_term_memory,
+            "channel_memories": context.channel_memories,
+            "current_channel_name": channel_messages.channel_name,
+            "top_level_messages": channel_messages.top_level_messages,
+            "thread_messages": channel_messages.thread_messages,
+            "target_thread_ts": context.target_thread_ts,
+            "target_thread_messages": target_thread_messages,
+        }
 
-        # Add instruction
-        parts.append("\n\n---")
-        parts.append(
-            "\n上記の会話履歴と参考情報を元に、"
-            "「返答すべきメッセージ」に対して自然な返答を生成してください。"
-        )
-
-        return "\n".join(parts)
+        return self._template.render(**template_context)
 
     def _should_log(self) -> bool:
         """Check if logging should occur."""
