@@ -294,7 +294,7 @@ class TestGenerateChannelMemories:
         messages = [create_message(channel, user, timestamp)]
         mock_message_repository.find_by_channel_since.return_value = messages
 
-        result = await use_case.generate_channel_memories()
+        result, any_regenerated = await use_case.generate_channel_memories()
 
         # Should return ChannelMemory for the channel
         assert channel.id in result
@@ -302,6 +302,7 @@ class TestGenerateChannelMemories:
         assert result[channel.id].channel_name == channel.name
         assert result[channel.id].short_term_memory == "summary"
         assert result[channel.id].long_term_memory == "summary"
+        assert any_regenerated is True
 
     async def test_no_messages_returns_empty_memories(
         self,
@@ -315,13 +316,14 @@ class TestGenerateChannelMemories:
         mock_channel_repository.find_all.return_value = [channel]
         mock_message_repository.find_by_channel_since.return_value = []
 
-        result = await use_case.generate_channel_memories()
+        result, any_regenerated = await use_case.generate_channel_memories()
 
         # No memory should be generated
         assert channel.id in result
         assert result[channel.id].short_term_memory is None
         assert result[channel.id].long_term_memory is None
         mock_memory_summarizer.summarize.assert_not_awaited()
+        assert any_regenerated is False
 
     async def test_short_term_memory_context_has_messages(
         self,
@@ -485,7 +487,7 @@ class TestGenerateChannelMemories:
         )
         mock_memory_repository.find_by_scope_and_type.return_value = existing_memory
 
-        result = await use_case.generate_channel_memories()
+        result, _ = await use_case.generate_channel_memories()
 
         # Existing long term memory should be preserved
         assert result[channel.id].long_term_memory == "existing content"
@@ -832,6 +834,242 @@ class TestGetActiveThreads:
         result = await use_case._get_active_threads(channel.id)
 
         assert result == []
+
+
+class TestIncrementalUpdate:
+    """Tests for incremental update (source_latest_message_ts check)."""
+
+    async def test_skips_generation_when_no_new_messages(
+        self,
+        use_case: GenerateMemoryUseCase,
+        mock_channel_repository: Mock,
+        mock_message_repository: Mock,
+        mock_memory_summarizer: Mock,
+        mock_memory_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that memory generation is skipped when no new messages."""
+        mock_channel_repository.find_all.return_value = [channel]
+
+        # Message with id "M001"
+        messages = [create_message(channel, user, timestamp, message_id="M001")]
+        mock_message_repository.find_by_channel_since.return_value = messages
+
+        # Existing memory with same source_latest_message_ts
+        existing_memory = Memory(
+            scope=MemoryScope.CHANNEL,
+            scope_id=channel.id,
+            memory_type=MemoryType.SHORT_TERM,
+            content="existing short term memory",
+            created_at=timestamp,
+            updated_at=timestamp,
+            source_message_count=1,
+            source_latest_message_ts="M001",  # Same as latest message
+        )
+        mock_memory_repository.find_by_scope_and_type.return_value = existing_memory
+
+        result, any_regenerated = await use_case.generate_channel_memories()
+
+        # Should NOT call summarize (skipped due to no new messages)
+        mock_memory_summarizer.summarize.assert_not_awaited()
+
+        # Existing memory content should be returned
+        assert result[channel.id].short_term_memory == "existing short term memory"
+        assert any_regenerated is False
+
+    async def test_generates_memory_when_new_messages_exist(
+        self,
+        use_case: GenerateMemoryUseCase,
+        mock_channel_repository: Mock,
+        mock_message_repository: Mock,
+        mock_memory_summarizer: Mock,
+        mock_memory_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that memory is regenerated when new messages exist."""
+        mock_channel_repository.find_all.return_value = [channel]
+
+        # Latest message is M002
+        messages = [
+            create_message(channel, user, timestamp, message_id="M001"),
+            create_message(channel, user, timestamp, message_id="M002"),
+        ]
+        mock_message_repository.find_by_channel_since.return_value = messages
+
+        # Existing memory with older source_latest_message_ts
+        existing_memory = Memory(
+            scope=MemoryScope.CHANNEL,
+            scope_id=channel.id,
+            memory_type=MemoryType.SHORT_TERM,
+            content="old short term memory",
+            created_at=timestamp,
+            updated_at=timestamp,
+            source_message_count=1,
+            source_latest_message_ts="M001",  # Older than M002
+        )
+        mock_memory_repository.find_by_scope_and_type.return_value = existing_memory
+        mock_memory_summarizer.summarize.return_value = "new summary"
+
+        result, any_regenerated = await use_case.generate_channel_memories()
+
+        # Should call summarize (new messages detected)
+        assert mock_memory_summarizer.summarize.await_count >= 1
+        assert result[channel.id].short_term_memory == "new summary"
+        assert any_regenerated is True
+
+    async def test_saves_source_latest_message_ts(
+        self,
+        use_case: GenerateMemoryUseCase,
+        mock_channel_repository: Mock,
+        mock_message_repository: Mock,
+        mock_memory_summarizer: Mock,
+        mock_memory_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that source_latest_message_ts is correctly saved."""
+        mock_channel_repository.find_all.return_value = [channel]
+
+        # Messages with M001 and M002 (M002 is latest)
+        messages = [
+            create_message(channel, user, timestamp, message_id="M001"),
+            create_message(channel, user, timestamp, message_id="M002"),
+        ]
+        mock_message_repository.find_by_channel_since.return_value = messages
+        mock_memory_repository.find_by_scope_and_type.return_value = None
+
+        await use_case.generate_channel_memories()
+
+        # Check that saved memory has source_latest_message_ts set
+        assert mock_memory_repository.save.await_count >= 1
+        saved_memory = mock_memory_repository.save.call_args_list[0][0][0]
+        assert saved_memory.source_latest_message_ts == "M002"
+        assert saved_memory.source_message_count == 2
+
+    async def test_thread_memory_skips_when_no_new_messages(
+        self,
+        use_case: GenerateMemoryUseCase,
+        mock_message_repository: Mock,
+        mock_channel_repository: Mock,
+        mock_memory_summarizer: Mock,
+        mock_memory_repository: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that thread memory generation is skipped when no new messages."""
+        thread_ts = "1234567890.123456"
+        messages = [
+            create_message(channel, user, timestamp, "M002", "Reply", thread_ts)
+        ]
+        mock_message_repository.find_by_thread.return_value = messages
+        mock_channel_repository.find_by_id.return_value = channel
+
+        # Existing thread memory with same source_latest_message_ts
+        existing_memory = Memory(
+            scope=MemoryScope.THREAD,
+            scope_id=f"{channel.id}:{thread_ts}",
+            memory_type=MemoryType.SHORT_TERM,
+            content="existing thread memory",
+            created_at=timestamp,
+            updated_at=timestamp,
+            source_message_count=1,
+            source_latest_message_ts="M002",  # Same as latest message
+        )
+        mock_memory_repository.find_by_scope_and_type.return_value = existing_memory
+
+        await use_case.generate_thread_memory(channel.id, thread_ts)
+
+        # Should NOT call summarize (skipped due to no new messages)
+        mock_memory_summarizer.summarize.assert_not_awaited()
+
+    async def test_workspace_memory_skips_when_no_channel_regenerated(
+        self,
+        use_case: GenerateMemoryUseCase,
+        mock_memory_summarizer: Mock,
+        mock_memory_repository: Mock,
+        timestamp: datetime,
+    ) -> None:
+        """Test that workspace memory is skipped when no channel regenerated."""
+        # Channel memories with no regeneration
+        channel_memories = {
+            "C001": ChannelMemory(
+                channel_id="C001",
+                channel_name="general",
+                short_term_memory="channel short term",
+                long_term_memory="channel long term",
+            )
+        }
+
+        # Existing workspace memory
+        existing_short = Memory(
+            scope=MemoryScope.WORKSPACE,
+            scope_id="default",
+            memory_type=MemoryType.SHORT_TERM,
+            content="existing workspace short term",
+            created_at=timestamp,
+            updated_at=timestamp,
+            source_message_count=1,
+        )
+        existing_long = Memory(
+            scope=MemoryScope.WORKSPACE,
+            scope_id="default",
+            memory_type=MemoryType.LONG_TERM,
+            content="existing workspace long term",
+            created_at=timestamp,
+            updated_at=timestamp,
+            source_message_count=1,
+        )
+
+        def mock_find(
+            scope: MemoryScope, scope_id: str, memory_type: MemoryType
+        ) -> Memory | None:
+            if scope == MemoryScope.WORKSPACE:
+                if memory_type == MemoryType.SHORT_TERM:
+                    return existing_short
+                return existing_long
+            return None
+
+        mock_memory_repository.find_by_scope_and_type.side_effect = mock_find
+
+        # any_channel_regenerated=False
+        await use_case.generate_workspace_memory(
+            channel_memories, any_channel_regenerated=False
+        )
+
+        # Should NOT call summarize (skipped)
+        mock_memory_summarizer.summarize.assert_not_awaited()
+
+    async def test_workspace_memory_generates_when_channel_regenerated(
+        self,
+        use_case: GenerateMemoryUseCase,
+        mock_memory_summarizer: Mock,
+        mock_memory_repository: Mock,
+    ) -> None:
+        """Test that workspace memory is generated when a channel was regenerated."""
+        channel_memories = {
+            "C001": ChannelMemory(
+                channel_id="C001",
+                channel_name="general",
+                short_term_memory="channel short term",
+                long_term_memory="channel long term",
+            )
+        }
+
+        mock_memory_repository.find_by_scope_and_type.return_value = None
+
+        # any_channel_regenerated=True
+        await use_case.generate_workspace_memory(
+            channel_memories, any_channel_regenerated=True
+        )
+
+        # Should call summarize (channel was regenerated)
+        assert mock_memory_summarizer.summarize.await_count == 2  # short + long
 
 
 class TestSaveMemory:
