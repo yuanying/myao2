@@ -527,17 +527,17 @@ async def _get_active_threads(self, channel_id: str) -> list[str]:
 
 ## 完了基準
 
-- [ ] GenerateMemoryUseCase が実装されている
-- [ ] execute() で全記憶が正しい順序で生成される
-- [ ] generate_channel_memories() でチャンネル記憶が生成される
-  - [ ] 短期記憶: メッセージから Context を構築
-  - [ ] 長期記憶: 短期記憶を channel_memories にセット
-- [ ] generate_workspace_memory() でワークスペース記憶が生成される
-  - [ ] 短期記憶: チャンネル短期記憶を統合
-  - [ ] 長期記憶: チャンネル長期記憶を統合
-- [ ] generate_thread_memory() でスレッド記憶が生成される
-  - [ ] target_thread_ts が正しくセットされる
-- [ ] Context 構築が正しく行われている
-- [ ] エラーハンドリングが実装されている
-- [ ] `__init__.py` でエクスポートされている
-- [ ] 全テストケースが通過する
+- [x] GenerateMemoryUseCase が実装されている
+- [x] execute() で全記憶が正しい順序で生成される
+- [x] generate_channel_memories() でチャンネル記憶が生成される
+  - [x] 短期記憶: メッセージから Context を構築
+  - [x] 長期記憶: 短期記憶を channel_memories にセット
+- [x] generate_workspace_memory() でワークスペース記憶が生成される
+  - [x] 短期記憶: チャンネル短期記憶を統合
+  - [x] 長期記憶: チャンネル長期記憶を統合
+- [x] generate_thread_memory() でスレッド記憶が生成される
+  - [x] target_thread_ts が正しくセットされる
+- [x] Context 構築が正しく行われている
+- [x] エラーハンドリングが実装されている
+- [x] `__init__.py` でエクスポートされている
+- [x] 全テストケースが通過する
