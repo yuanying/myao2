@@ -293,12 +293,12 @@ class ReplyToMentionUseCase:
 
 ## 完了基準
 
-- [ ] MemoryRepository が初期化されている
-- [ ] MemorySummarizer が初期化されている
-- [ ] GenerateMemoryUseCase が初期化されている
-- [ ] BackgroundMemoryGenerator が初期化されている
-- [ ] AutonomousResponseUseCase に MemoryRepository が注入されている
-- [ ] ReplyToMentionUseCase に MemoryRepository が注入されている
-- [ ] BackgroundMemoryGenerator がバックグラウンドタスクとして起動される
-- [ ] グレースフルシャットダウンが正しく動作する
-- [ ] 全テストケースが通過する
+- [x] MemoryRepository が初期化されている
+- [x] MemorySummarizer が初期化されている
+- [x] GenerateMemoryUseCase が初期化されている
+- [x] BackgroundMemoryGenerator が初期化されている
+- [x] AutonomousResponseUseCase に MemoryRepository が注入されている
+- [x] ReplyToMentionUseCase に MemoryRepository が注入されている
+- [x] BackgroundMemoryGenerator がバックグラウンドタスクとして起動される
+- [x] グレースフルシャットダウンが正しく動作する
+- [x] 全テストケースが通過する
