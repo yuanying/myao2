@@ -7,19 +7,22 @@ import sys
 from pathlib import Path
 
 from myao2.application.services import PeriodicChecker
+from myao2.application.services.background_memory import BackgroundMemoryGenerator
 from myao2.application.use_cases import AutonomousResponseUseCase, ReplyToMentionUseCase
+from myao2.application.use_cases.generate_memory import GenerateMemoryUseCase
 from myao2.config import ConfigError, LoggingConfig, load_config
 from myao2.infrastructure.llm import (
     LiteLLMResponseGenerator,
     LLMClient,
     LLMResponseJudgment,
 )
+from myao2.infrastructure.llm.memory_summarizer import LLMMemorySummarizer
 from myao2.infrastructure.persistence import (
     DatabaseManager,
     DBChannelMonitor,
-    DBConversationHistoryService,
     SQLiteChannelRepository,
     SQLiteJudgmentCacheRepository,
+    SQLiteMemoryRepository,
     SQLiteMessageRepository,
     SQLiteUserRepository,
 )
@@ -104,13 +107,13 @@ async def main() -> None:
     message_repository = SQLiteMessageRepository(db_manager.get_session)
     user_repository = SQLiteUserRepository(db_manager.get_session)
     channel_repository = SQLiteChannelRepository(db_manager.get_session)
+    memory_repository = SQLiteMemoryRepository(db_manager.get_session)
 
     event_adapter = SlackEventAdapter(
         client=app.client,
         user_repository=user_repository,
         channel_repository=channel_repository,
     )
-    conversation_history_service = DBConversationHistoryService(message_repository)
 
     # Use default LLM config
     if "default" not in config.llm:
@@ -130,7 +133,8 @@ async def main() -> None:
         messaging_service=messaging_service,
         response_generator=response_generator,
         message_repository=message_repository,
-        conversation_history_service=conversation_history_service,
+        channel_repository=channel_repository,
+        memory_repository=memory_repository,
         persona=config.persona,
         bot_user_id=bot_user_id,
     )
@@ -172,16 +176,41 @@ async def main() -> None:
         messaging_service=messaging_service,
         message_repository=message_repository,
         judgment_cache_repository=judgment_cache_repository,
-        conversation_history_service=conversation_history_service,
+        channel_repository=channel_repository,
+        memory_repository=memory_repository,
         config=config,
         bot_user_id=bot_user_id,
-        channel_repository=channel_repository,
         channel_sync_service=channel_initializer,
     )
 
     periodic_checker = PeriodicChecker(
         autonomous_response_use_case=autonomous_response_use_case,
         config=config.response,
+    )
+
+    # Initialize memory generation components
+    memory_llm_config = config.llm.get(
+        config.memory.memory_generation_llm,
+        config.llm["default"],
+    )
+    memory_llm_client = LLMClient(memory_llm_config)
+    memory_summarizer = LLMMemorySummarizer(
+        client=memory_llm_client,
+        config=config.memory,
+    )
+
+    generate_memory_use_case = GenerateMemoryUseCase(
+        memory_repository=memory_repository,
+        message_repository=message_repository,
+        channel_repository=channel_repository,
+        memory_summarizer=memory_summarizer,
+        config=config.memory,
+        persona=config.persona,
+    )
+
+    background_memory_generator = BackgroundMemoryGenerator(
+        generate_memory_use_case=generate_memory_use_case,
+        config=config.memory,
     )
 
     runner = SlackAppRunner(app, config.slack.app_token)
@@ -192,10 +221,15 @@ async def main() -> None:
         "Starting periodic checker (interval: %ds)...",
         config.response.check_interval_seconds,
     )
+    logger.info(
+        "Starting background memory generator (interval: %ds)...",
+        config.memory.long_term_update_interval_seconds,
+    )
 
     # Create tasks
     runner_task = asyncio.create_task(runner.start())
     checker_task = asyncio.create_task(periodic_checker.start())
+    memory_task = asyncio.create_task(background_memory_generator.start())
 
     # Setup signal handlers for graceful shutdown
     stop_event = asyncio.Event()
@@ -214,8 +248,9 @@ async def main() -> None:
     # Graceful shutdown
     logger.info("Shutting down...")
 
-    # Stop periodic checker (has graceful stop)
+    # Stop periodic checker and background memory generator (have graceful stop)
     await periodic_checker.stop()
+    await background_memory_generator.stop()
 
     # Try to close runner with timeout
     closed = await runner.close(timeout=5.0)
@@ -225,9 +260,10 @@ async def main() -> None:
     # Cancel any remaining tasks
     runner_task.cancel()
     checker_task.cancel()
+    memory_task.cancel()
 
     # Wait for tasks to complete
-    await asyncio.gather(runner_task, checker_task, return_exceptions=True)
+    await asyncio.gather(runner_task, checker_task, memory_task, return_exceptions=True)
 
     # Close database connections
     await db_manager.close()
