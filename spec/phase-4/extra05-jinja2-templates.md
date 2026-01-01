@@ -200,9 +200,9 @@ class LLMMemorySummarizer:
 
 ## 完了基準
 
-- [ ] judgment_prompt.j2 が作成されている
-- [ ] memory_prompt.j2 が作成されている
-- [ ] LLMResponseJudgment が Jinja2 テンプレートを使用している
-- [ ] LLMMemorySummarizer が Jinja2 テンプレートを使用している
-- [ ] 既存のテストが通過する
-- [ ] 新規テストケースが追加されている
+- [x] judgment_prompt.j2 が作成されている
+- [x] memory_prompt.j2 が作成されている
+- [x] LLMResponseJudgment が Jinja2 テンプレートを使用している
+- [x] LLMMemorySummarizer が Jinja2 テンプレートを使用している
+- [x] 既存のテストが通過する
+- [x] 新規テストケースが追加されている

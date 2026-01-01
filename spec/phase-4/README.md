@@ -475,12 +475,12 @@ tests/
 
 ## エクストラタスク
 
-| # | タスク | 詳細設計書 | 依存 |
-|---|--------|-----------|------|
-| extra04 | ResponseJudgment#judge インターフェース簡素化 | [extra04-judgment-interface-simplify.md](./extra04-judgment-interface-simplify.md) | - |
-| extra05 | 全LLM呼び出しのJinja2テンプレート化 | [extra05-jinja2-templates.md](./extra05-jinja2-templates.md) | - |
-| extra06 | 全LLM呼び出しのログ出力統一 | [extra06-llm-logging.md](./extra06-llm-logging.md) | - |
-| extra07 | min_wait_seconds への jitter 追加 | [extra07-min-wait-jitter.md](./extra07-min-wait-jitter.md) | - |
+| # | タスク | 詳細設計書 | 依存 | 状態 |
+|---|--------|-----------|------|------|
+| extra04 | ResponseJudgment#judge インターフェース簡素化 | [extra04-judgment-interface-simplify.md](./extra04-judgment-interface-simplify.md) | - | 完了 |
+| extra05 | 全LLM呼び出しのJinja2テンプレート化 | [extra05-jinja2-templates.md](./extra05-jinja2-templates.md) | - | 完了 |
+| extra06 | 全LLM呼び出しのログ出力統一 | [extra06-llm-logging.md](./extra06-llm-logging.md) | - | - |
+| extra07 | min_wait_seconds への jitter 追加 | [extra07-min-wait-jitter.md](./extra07-min-wait-jitter.md) | - | - |
 
 ### エクストラタスク概要
 
