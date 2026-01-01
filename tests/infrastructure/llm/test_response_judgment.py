@@ -538,6 +538,59 @@ class TestLLMResponseJudgmentNoTargetMessage:
         mock_client.complete.assert_not_awaited()
 
 
+class TestLLMResponseJudgmentTemplateRendering:
+    """Tests for Jinja2 template rendering."""
+
+    def test_template_renders_persona_name(
+        self,
+        judgment: LLMResponseJudgment,
+    ) -> None:
+        """Test that template renders persona name correctly."""
+        rendered = judgment._template.render(
+            persona_name="TestBot",
+            current_time="2024-01-01 12:00:00 UTC",
+        )
+        assert "TestBot" in rendered
+
+    def test_template_renders_current_time(
+        self,
+        judgment: LLMResponseJudgment,
+    ) -> None:
+        """Test that template renders current time correctly."""
+        rendered = judgment._template.render(
+            persona_name="myao",
+            current_time="2024-06-15 14:30:00 UTC",
+        )
+        assert "2024-06-15 14:30:00 UTC" in rendered
+
+    def test_template_contains_judgment_criteria(
+        self,
+        judgment: LLMResponseJudgment,
+    ) -> None:
+        """Test that template contains all judgment criteria."""
+        rendered = judgment._template.render(
+            persona_name="myao",
+            current_time="2024-01-01 12:00:00 UTC",
+        )
+        assert "判断基準" in rendered
+        assert "誰も反応していないメッセージがあるか" in rendered
+        assert "困っている/寂しそうな状況か" in rendered
+        assert "有用なアドバイスができそうか" in rendered
+
+    def test_template_contains_json_format_instruction(
+        self,
+        judgment: LLMResponseJudgment,
+    ) -> None:
+        """Test that template contains JSON format instructions."""
+        rendered = judgment._template.render(
+            persona_name="myao",
+            current_time="2024-01-01 12:00:00 UTC",
+        )
+        assert "should_respond" in rendered
+        assert "reason" in rendered
+        assert "confidence" in rendered
+
+
 class TestLLMResponseJudgmentThreadTarget:
     """Tests with thread target."""
 
