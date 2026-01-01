@@ -737,3 +737,72 @@ class TestLLMMemorySummarizerFormatMessages:
         result = summarizer._format_messages([])
 
         assert result == ""
+
+
+class TestLLMMemorySummarizerTemplateRendering:
+    """Tests for Jinja2 template rendering."""
+
+    def test_template_renders_workspace_prompt(
+        self,
+        summarizer: LLMMemorySummarizer,
+    ) -> None:
+        """Test that template renders workspace prompt correctly."""
+        rendered = summarizer._template.render(
+            scope="workspace",
+            memory_type="long_term",
+        )
+        assert "ワークスペース全体の記憶を統合" in rendered
+        assert "チャンネル横断的" in rendered
+
+    def test_template_renders_long_term_prompt(
+        self,
+        summarizer: LLMMemorySummarizer,
+    ) -> None:
+        """Test that template renders long-term prompt correctly."""
+        rendered = summarizer._template.render(
+            scope="channel",
+            memory_type="long_term",
+        )
+        assert "長期的な傾向を時系列で要約" in rendered
+        assert "時系列順に出来事を整理" in rendered
+
+    def test_template_renders_short_term_prompt(
+        self,
+        summarizer: LLMMemorySummarizer,
+    ) -> None:
+        """Test that template renders short-term prompt correctly."""
+        rendered = summarizer._template.render(
+            scope="channel",
+            memory_type="short_term",
+        )
+        assert "直近の状況を要約" in rendered
+        assert "現在進行中の話題" in rendered
+
+    def test_workspace_scope_overrides_memory_type(
+        self,
+        summarizer: LLMMemorySummarizer,
+    ) -> None:
+        """Test that workspace scope uses workspace prompt regardless of memory_type."""
+        long_term_rendered = summarizer._template.render(
+            scope="workspace",
+            memory_type="long_term",
+        )
+        short_term_rendered = summarizer._template.render(
+            scope="workspace",
+            memory_type="short_term",
+        )
+        # Both should use workspace prompt
+        assert "ワークスペース全体の記憶を統合" in long_term_rendered
+        assert "ワークスペース全体の記憶を統合" in short_term_rendered
+
+    def test_thread_scope_uses_memory_type(
+        self,
+        summarizer: LLMMemorySummarizer,
+    ) -> None:
+        """Test that thread scope respects memory_type."""
+        short_term_rendered = summarizer._template.render(
+            scope="thread",
+            memory_type="short_term",
+        )
+        # Thread with short-term should use short-term prompt
+        assert "直近の状況を要約" in short_term_rendered

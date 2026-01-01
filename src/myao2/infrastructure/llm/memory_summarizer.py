@@ -6,38 +6,7 @@ from myao2.domain.entities.memory import MemoryScope, MemoryType
 from myao2.domain.entities.message import Message
 from myao2.domain.services.memory_summarizer import MemorySummarizer
 from myao2.infrastructure.llm.client import LLMClient
-
-# System prompts
-_LONG_TERM_SYSTEM_PROMPT = (
-    "あなたは会話の長期的な傾向を時系列で要約するアシスタントです。\n\n"
-    "以下の点に注意して要約してください：\n"
-    "- 時系列順に出来事を整理する\n"
-    "- 重要なトピックや決定事項を記録する\n"
-    "- 参加者の傾向や関係性を把握する\n"
-    "- 繰り返し話題になるテーマを特定する\n"
-    "- 具体的な日時や期間を含める（可能な場合）\n\n"
-    "要約は箇条書きで、簡潔かつ具体的に記述してください。"
-)
-
-_SHORT_TERM_SYSTEM_PROMPT = (
-    "あなたは会話の直近の状況を要約するアシスタントです。\n\n"
-    "以下の点に注意して要約してください：\n"
-    "- 現在進行中の話題を把握する\n"
-    "- 直近の質問や問題を記録する\n"
-    "- 参加者の現在の関心事を特定する\n"
-    "- 未解決の事項を明確にする\n\n"
-    "要約は箇条書きで、簡潔かつ具体的に記述してください。"
-)
-
-_WORKSPACE_SYSTEM_PROMPT = (
-    "あなたはワークスペース全体の記憶を統合するアシスタントです。\n\n"
-    "複数チャンネルの記憶を統合し、以下の点に注意して要約してください：\n"
-    "- チャンネル横断的なトピックや傾向を把握する\n"
-    "- 重要なプロジェクトや議論を記録する\n"
-    "- 組織全体の動向や関心事を特定する\n"
-    "- 繰り返し話題になるテーマを特定する\n\n"
-    "要約は箇条書きで、簡潔かつ具体的に記述してください。"
-)
+from myao2.infrastructure.llm.templates import create_jinja_env
 
 # Scope name mapping
 _SCOPE_NAMES: dict[MemoryScope, str] = {
@@ -63,6 +32,8 @@ class LLMMemorySummarizer(MemorySummarizer):
         """
         self._client = client
         self._config = config
+        self._jinja_env = create_jinja_env()
+        self._template = self._jinja_env.get_template("memory_prompt.j2")
 
     async def summarize(
         self,
@@ -297,11 +268,10 @@ class LLMMemorySummarizer(MemorySummarizer):
         Returns:
             System prompt string.
         """
-        if scope == MemoryScope.WORKSPACE:
-            return _WORKSPACE_SYSTEM_PROMPT
-        if memory_type == MemoryType.LONG_TERM:
-            return _LONG_TERM_SYSTEM_PROMPT
-        return _SHORT_TERM_SYSTEM_PROMPT
+        return self._template.render(
+            scope=scope.value,
+            memory_type=memory_type.value,
+        )
 
     def _get_max_tokens(self, memory_type: MemoryType) -> int:
         """Get maximum tokens for the memory type.
