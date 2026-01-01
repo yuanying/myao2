@@ -473,6 +473,44 @@ tests/
 
 ---
 
+## エクストラタスク
+
+| # | タスク | 詳細設計書 | 依存 |
+|---|--------|-----------|------|
+| extra04 | ResponseJudgment#judge インターフェース簡素化 | [extra04-judgment-interface-simplify.md](./extra04-judgment-interface-simplify.md) | - |
+| extra05 | 全LLM呼び出しのJinja2テンプレート化 | [extra05-jinja2-templates.md](./extra05-jinja2-templates.md) | - |
+| extra06 | 全LLM呼び出しのログ出力統一 | [extra06-llm-logging.md](./extra06-llm-logging.md) | - |
+| extra07 | min_wait_seconds への jitter 追加 | [extra07-min-wait-jitter.md](./extra07-min-wait-jitter.md) | - |
+
+### エクストラタスク概要
+
+#### extra04: ResponseJudgment#judge インターフェース簡素化
+
+ResponseJudgment#judge の引数を `context` のみに変更し、判定対象スレッドは
+`context.target_thread_ts` から取得するようにする。同時に ChannelMonitor の
+`get_unreplied_messages` を `get_unreplied_threads` に変更し、スレッド単位で
+未応答を管理する。
+
+#### extra05: 全LLM呼び出しのJinja2テンプレート化
+
+ResponseGenerator 以外の LLM 呼び出し（ResponseJudgment, MemorySummarizer）でも
+Jinja2 テンプレートを使用してシステムプロンプトを組み立てるようにする。
+これによりプロンプトの管理方法を統一し、変更時の保守性を向上させる。
+
+#### extra06: 全LLM呼び出しのログ出力統一
+
+全ての LLM 呼び出し時にリクエスト内容とレスポンス内容をログ出力するようにする。
+`config.logging.debug_llm_messages` フラグで統一的に制御し、
+デバッグ時の問題特定を容易にする。
+
+#### extra07: min_wait_seconds への jitter 追加
+
+自律応答の待機時間にランダムなばらつき（jitter）を追加する。
+`ResponseConfig.jitter_ratio`（デフォルト: 0.2 = ±20%）で制御し、
+より人間らしい応答タイミングを実現する。
+
+---
+
 ## 今後の拡張（Phase 5 以降）
 
 - ユーザーごとの記憶（特定ユーザーとの関係性）
