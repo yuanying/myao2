@@ -97,14 +97,10 @@ class TestLiteLLMResponseGenerator:
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
-        user_message: Message,
         sample_context: Context,
     ) -> None:
         """Test basic response generation."""
-        result = await generator.generate(
-            user_message=user_message,
-            context=sample_context,
-        )
+        result = await generator.generate(context=sample_context)
 
         assert result == "Hello! Nice to meet you."
         mock_client.complete.assert_awaited_once()
@@ -113,14 +109,10 @@ class TestLiteLLMResponseGenerator:
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
-        user_message: Message,
         sample_context: Context,
     ) -> None:
         """Test that only system message is sent to LLM."""
-        await generator.generate(
-            user_message=user_message,
-            context=sample_context,
-        )
+        await generator.generate(context=sample_context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
@@ -133,14 +125,10 @@ class TestLiteLLMResponseGenerator:
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
-        user_message: Message,
         sample_context: Context,
     ) -> None:
         """Test that persona system prompt is included."""
-        await generator.generate(
-            user_message=user_message,
-            context=sample_context,
-        )
+        await generator.generate(context=sample_context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
@@ -154,9 +142,7 @@ class TestLiteLLMResponseGenerator:
         mock_client: MagicMock,
         user_message: Message,
         persona_config: PersonaConfig,
-        sample_user: User,
         sample_channel: Channel,
-        timestamp: datetime,
     ) -> None:
         """Test that current user message is included in system prompt."""
         # Create context with the user message in top_level_messages
@@ -171,10 +157,7 @@ class TestLiteLLMResponseGenerator:
             conversation_history=channel_messages,
         )
 
-        await generator.generate(
-            user_message=user_message,
-            context=context,
-        )
+        await generator.generate(context=context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
@@ -190,7 +173,6 @@ class TestLiteLLMResponseGenerator:
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
-        user_message: Message,
         persona_config: PersonaConfig,
         sample_user: User,
         sample_bot: User,
@@ -228,10 +210,7 @@ class TestLiteLLMResponseGenerator:
             conversation_history=channel_messages,
         )
 
-        await generator.generate(
-            user_message=user_message,
-            context=context,
-        )
+        await generator.generate(context=context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
@@ -250,14 +229,10 @@ class TestLiteLLMResponseGenerator:
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
-        user_message: Message,
         sample_context: Context,
     ) -> None:
         """Test that instruction is included at the end of system prompt."""
-        await generator.generate(
-            user_message=user_message,
-            context=sample_context,
-        )
+        await generator.generate(context=sample_context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
@@ -271,17 +246,13 @@ class TestLiteLLMResponseGenerator:
         self,
         generator: LiteLLMResponseGenerator,
         mock_client: MagicMock,
-        user_message: Message,
         sample_context: Context,
     ) -> None:
         """Test that LLM errors are propagated."""
         mock_client.complete.side_effect = LLMError("API error")
 
         with pytest.raises(LLMError):
-            await generator.generate(
-                user_message=user_message,
-                context=sample_context,
-            )
+            await generator.generate(context=sample_context)
 
 
 class TestFormatTimestamp:
@@ -382,9 +353,8 @@ class TestBuildSystemPromptWithMemory:
             persona=persona_config,
             conversation_history=channel_messages,
         )
-        user_msg = messages[0]
 
-        result = generator._build_system_prompt(context, user_msg)
+        result = generator._build_system_prompt(context)
 
         # Should include persona prompt
         assert "You are a friendly bot." in result
@@ -432,9 +402,8 @@ class TestBuildSystemPromptWithMemory:
             workspace_long_term_memory="Workspace long-term memory content.",
             workspace_short_term_memory="Workspace short-term memory content.",
         )
-        user_msg = messages[0]
 
-        result = generator._build_system_prompt(context, user_msg)
+        result = generator._build_system_prompt(context)
 
         # Should include memory section
         assert "## 記憶" in result
@@ -487,9 +456,8 @@ class TestBuildSystemPromptWithMemory:
             conversation_history=channel_messages,
             channel_memories=channel_memories,
         )
-        user_msg = messages[0]
 
-        result = generator._build_system_prompt(context, user_msg)
+        result = generator._build_system_prompt(context)
 
         # Should include channel info section
         assert "## チャンネル情報" in result
@@ -557,9 +525,8 @@ class TestBuildSystemPromptWithMemory:
             conversation_history=channel_messages,
             target_thread_ts="1234567890.000001",
         )
-        user_msg = thread_messages["1234567890.000001"][1]
 
-        result = generator._build_system_prompt(context, user_msg)
+        result = generator._build_system_prompt(context)
 
         # Target thread should NOT appear in "### スレッド:" section
         # (to avoid duplication)
@@ -601,9 +568,8 @@ class TestBuildSystemPromptWithMemory:
             conversation_history=channel_messages,
             target_thread_ts=None,  # Top-level reply
         )
-        user_msg = top_messages[0]
 
-        result = generator._build_system_prompt(context, user_msg)
+        result = generator._build_system_prompt(context)
 
         # For top-level reply, "### トップレベル" section should NOT exist
         assert "### トップレベル" not in result
@@ -654,9 +620,8 @@ class TestBuildSystemPromptWithMemory:
             channel_memories=channel_memories,
             target_thread_ts=None,
         )
-        user_msg = top_messages[0]
 
-        result = generator._build_system_prompt(context, user_msg)
+        result = generator._build_system_prompt(context)
 
         # Verify order of sections (broad to narrow)
         persona_pos = result.find("You are a friendly bot.")

@@ -135,10 +135,10 @@ AutonomousResponseUseCase.check_channel():
 
 ## 完了基準
 
-- [ ] ResponseJudgment Protocol の引数が context のみになっている
-- [ ] ChannelMonitor に get_unreplied_threads が実装されている
-- [ ] get_unreplied_messages は削除または非推奨になっている
-- [ ] LLMResponseJudgment が新インターフェースを実装している
-- [ ] DBChannelMonitor/SlackChannelMonitor が get_unreplied_threads を実装している
-- [ ] AutonomousResponseUseCase が新インターフェースを使用している
-- [ ] 全テストが通過する
+- [x] ResponseJudgment Protocol の引数が context のみになっている
+- [x] ChannelMonitor に get_unreplied_threads が実装されている
+- [x] get_unreplied_messages は削除または非推奨になっている
+- [x] LLMResponseJudgment が新インターフェースを実装している
+- [x] DBChannelMonitor/SlackChannelMonitor が get_unreplied_threads を実装している
+- [x] AutonomousResponseUseCase が新インターフェースを使用している
+- [x] 全テストが通過する

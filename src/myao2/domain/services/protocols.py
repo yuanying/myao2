@@ -79,14 +79,16 @@ class ResponseGenerator(Protocol):
 
     async def generate(
         self,
-        user_message: Message,
         context: Context,
     ) -> str:
         """Generate a response.
 
+        The target thread/message is identified by context.target_thread_ts.
+        - If target_thread_ts is None, responds to top-level messages
+        - If target_thread_ts is set, responds to the specified thread
+
         Args:
-            user_message: User's message to respond to.
-            context: Conversation context (history, persona info).
+            context: Conversation context (history, persona info, target_thread_ts).
 
         Returns:
             Generated response text.

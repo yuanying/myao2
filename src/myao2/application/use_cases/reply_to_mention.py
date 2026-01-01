@@ -87,10 +87,7 @@ class ReplyToMentionUseCase:
         )
 
         # 5. Generate response with context
-        response_text = await self._response_generator.generate(
-            user_message=message,
-            context=context,
-        )
+        response_text = await self._response_generator.generate(context=context)
 
         # 6. Send response
         await self._messaging_service.send_message(

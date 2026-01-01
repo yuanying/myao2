@@ -322,10 +322,8 @@ class TestReplyToMentionUseCaseContextBuilding:
         # Verify generate was called with proper Context
         mock_response_generator.generate.assert_awaited_once()
         call_args = mock_response_generator.generate.call_args
-        passed_message = call_args.kwargs["user_message"]
         passed_context = call_args.kwargs["context"]
 
-        assert passed_message == message
         assert isinstance(passed_context, Context)
         assert passed_context.persona == persona
         # conversation_history is now ChannelMessages
@@ -374,7 +372,7 @@ class TestReplyToMentionUseCaseContextGeneration:
         timestamp: datetime,
         bot_user_id: str,
     ) -> None:
-        """Test that generate is called with message and context."""
+        """Test that generate is called with context."""
         message = Message(
             id="M001",
             channel=channel,
@@ -389,7 +387,5 @@ class TestReplyToMentionUseCaseContextGeneration:
         mock_response_generator.generate.assert_awaited_once()
         call_args = mock_response_generator.generate.call_args
 
-        assert "user_message" in call_args.kwargs
         assert "context" in call_args.kwargs
-        assert call_args.kwargs["user_message"] == message
         assert isinstance(call_args.kwargs["context"], Context)

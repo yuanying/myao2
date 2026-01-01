@@ -95,6 +95,40 @@ def create_bot_message(
     )
 
 
+def create_bot_message_for_thread(
+    response_text: str,
+    channel: Channel,
+    thread_ts: str | None,
+    bot_user_id: str,
+    bot_name: str,
+) -> Message:
+    """Create bot response message for a thread.
+
+    Args:
+        response_text: The response text.
+        channel: The channel to post to.
+        thread_ts: Thread timestamp (None for top-level).
+        bot_user_id: The bot's user ID.
+        bot_name: The bot's display name.
+
+    Returns:
+        Bot response Message.
+    """
+    return Message(
+        id=str(uuid.uuid4()),
+        channel=channel,
+        user=User(
+            id=bot_user_id,
+            name=bot_name,
+            is_bot=True,
+        ),
+        text=response_text,
+        timestamp=datetime.now(timezone.utc),
+        thread_ts=thread_ts,
+        mentions=[],
+    )
+
+
 async def build_context_with_memory(
     memory_repository: MemoryRepository,
     message_repository: MessageRepository,
