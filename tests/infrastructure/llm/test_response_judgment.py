@@ -79,11 +79,17 @@ def create_empty_channel_messages(
 
 
 @pytest.fixture
-def sample_context(persona_config: PersonaConfig) -> Context:
-    """Create test context with empty history."""
+def sample_context(persona_config: PersonaConfig, target_message: Message) -> Context:
+    """Create test context with target message in history."""
+    channel_messages = ChannelMessages(
+        channel_id="C123",
+        channel_name="general",
+        top_level_messages=[target_message],
+    )
     return Context(
         persona=persona_config,
-        conversation_history=create_empty_channel_messages(),
+        conversation_history=channel_messages,
+        target_thread_ts=None,
     )
 
 
@@ -111,14 +117,13 @@ class TestLLMResponseJudgmentBasic:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test judgment when LLM returns should_respond=true."""
         mock_client.complete = AsyncMock(
             return_value='{"should_respond": true, "reason": "User needs help"}'
         )
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         assert result.should_respond is True
         assert result.reason == "User needs help"
@@ -128,14 +133,13 @@ class TestLLMResponseJudgmentBasic:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test judgment when LLM returns should_respond=false."""
         mock_client.complete = AsyncMock(
             return_value='{"should_respond": false, "reason": "Active conversation"}'
         )
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         assert result.should_respond is False
         assert result.reason == "Active conversation"
@@ -145,10 +149,9 @@ class TestLLMResponseJudgmentBasic:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that judge calls LLM client."""
-        await judgment.judge(sample_context, target_message)
+        await judgment.judge(sample_context)
 
         mock_client.complete.assert_awaited_once()
 
@@ -161,14 +164,13 @@ class TestLLMResponseJudgmentJsonParsing:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test parsing valid JSON response."""
         mock_client.complete = AsyncMock(
             return_value='{"should_respond": true, "reason": "Valid reason"}'
         )
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         assert result.should_respond is True
         assert result.reason == "Valid reason"
@@ -178,12 +180,11 @@ class TestLLMResponseJudgmentJsonParsing:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that invalid JSON returns should_respond=False."""
         mock_client.complete = AsyncMock(return_value="not valid json")
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         assert result.should_respond is False
         assert "parse" in result.reason.lower() or "failed" in result.reason.lower()
@@ -193,12 +194,11 @@ class TestLLMResponseJudgmentJsonParsing:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that missing should_respond field returns False."""
         mock_client.complete = AsyncMock(return_value='{"reason": "Some reason"}')
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         assert result.should_respond is False
 
@@ -207,7 +207,6 @@ class TestLLMResponseJudgmentJsonParsing:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test parsing JSON embedded in extra text."""
         response = (
@@ -215,7 +214,7 @@ class TestLLMResponseJudgmentJsonParsing:
         )
         mock_client.complete = AsyncMock(return_value=response)
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         # Should extract JSON from response
         assert result.should_respond is True
@@ -230,12 +229,11 @@ class TestLLMResponseJudgmentErrorHandling:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that LLM errors return should_respond=False."""
         mock_client.complete = AsyncMock(side_effect=LLMError("API error"))
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         assert result.should_respond is False
         assert "error" in result.reason.lower()
@@ -249,7 +247,6 @@ class TestLLMResponseJudgmentPrompt:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that prompt contains current time."""
         fixed_time = datetime(2024, 6, 15, 14, 30, 0, tzinfo=timezone.utc)
@@ -260,7 +257,7 @@ class TestLLMResponseJudgmentPrompt:
             mock_datetime.now.return_value = fixed_time
             mock_datetime.side_effect = lambda *args, **kw: datetime(*args, **kw)
 
-            await judgment.judge(sample_context, target_message)
+            await judgment.judge(sample_context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
@@ -273,10 +270,9 @@ class TestLLMResponseJudgmentPrompt:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that prompt contains persona name."""
-        await judgment.judge(sample_context, target_message)
+        await judgment.judge(sample_context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
@@ -289,10 +285,9 @@ class TestLLMResponseJudgmentPrompt:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that prompt contains target message section."""
-        await judgment.judge(sample_context, target_message)
+        await judgment.judge(sample_context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
@@ -313,10 +308,9 @@ class TestLLMResponseJudgmentPrompt:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that target message includes timestamp."""
-        await judgment.judge(sample_context, target_message)
+        await judgment.judge(sample_context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
@@ -336,10 +330,9 @@ class TestLLMResponseJudgmentPrompt:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that target message includes user name."""
-        await judgment.judge(sample_context, target_message)
+        await judgment.judge(sample_context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
@@ -361,7 +354,6 @@ class TestLLMResponseJudgmentConfidence:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that confidence is correctly parsed from response."""
         response = (
@@ -369,7 +361,7 @@ class TestLLMResponseJudgmentConfidence:
         )
         mock_client.complete = AsyncMock(return_value=response)
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         assert result.should_respond is True
         assert result.reason == "Help needed"
@@ -380,14 +372,13 @@ class TestLLMResponseJudgmentConfidence:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that confidence defaults to 1.0 when not provided."""
         mock_client.complete = AsyncMock(
             return_value='{"should_respond": false, "reason": "Not interesting"}'
         )
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         assert result.should_respond is False
         assert result.confidence == 1.0
@@ -397,13 +388,12 @@ class TestLLMResponseJudgmentConfidence:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that confidence > 1.0 is clamped to 1.0."""
         response = '{"should_respond": true, "reason": "Very sure", "confidence": 1.5}'
         mock_client.complete = AsyncMock(return_value=response)
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         assert result.confidence == 1.0
 
@@ -412,7 +402,6 @@ class TestLLMResponseJudgmentConfidence:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that confidence < 0.0 is clamped to 0.0."""
         response = (
@@ -420,7 +409,7 @@ class TestLLMResponseJudgmentConfidence:
         )
         mock_client.complete = AsyncMock(return_value=response)
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         assert result.confidence == 0.0
 
@@ -429,12 +418,11 @@ class TestLLMResponseJudgmentConfidence:
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
-        target_message: Message,
     ) -> None:
         """Test that confidence is 0.0 when parsing fails."""
         mock_client.complete = AsyncMock(return_value="not valid json at all")
 
-        result = await judgment.judge(sample_context, target_message)
+        result = await judgment.judge(sample_context)
 
         assert result.should_respond is False
         assert result.confidence == 0.0
@@ -454,6 +442,7 @@ class TestLLMResponseJudgmentMultipleMessages:
         """Test formatting of multiple messages with timestamps."""
         user2 = User(id="U456", name="another_user", is_bot=False)
 
+        # Create messages with the target (latest) being the one to judge
         history_messages = [
             Message(
                 id="1",
@@ -473,17 +462,16 @@ class TestLLMResponseJudgmentMultipleMessages:
                 thread_ts=None,
                 mentions=[],
             ),
+            Message(
+                id="3",
+                channel=sample_channel,
+                user=sample_user,
+                text="Can anyone help me?",
+                timestamp=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+                thread_ts=None,
+                mentions=[],
+            ),
         ]
-
-        target = Message(
-            id="3",
-            channel=sample_channel,
-            user=sample_user,
-            text="Can anyone help me?",
-            timestamp=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
-            thread_ts=None,
-            mentions=[],
-        )
 
         channel_messages = ChannelMessages(
             channel_id=sample_channel.id,
@@ -493,9 +481,10 @@ class TestLLMResponseJudgmentMultipleMessages:
         context = Context(
             persona=persona_config,
             conversation_history=channel_messages,
+            target_thread_ts=None,
         )
 
-        await judgment.judge(context, target)
+        await judgment.judge(context)
 
         call_args = mock_client.complete.call_args
         llm_messages = call_args.args[0]
@@ -516,6 +505,99 @@ class TestLLMResponseJudgmentMultipleMessages:
         assert "Hello everyone" in content
         assert "Hi there!" in content
 
-        # Target message should be in separate section
+        # Target message (latest) should be in separate section
         assert "判定対象メッセージ" in content
         assert "Can anyone help me?" in content
+
+
+class TestLLMResponseJudgmentNoTargetMessage:
+    """Tests when no target message is found."""
+
+    async def test_no_target_message_returns_false(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that empty context returns should_respond=False."""
+        channel_messages = ChannelMessages(
+            channel_id="C123",
+            channel_name="general",
+            top_level_messages=[],
+        )
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            target_thread_ts=None,
+        )
+
+        result = await judgment.judge(context)
+
+        assert result.should_respond is False
+        # LLM should not be called
+        mock_client.complete.assert_not_awaited()
+
+
+class TestLLMResponseJudgmentThreadTarget:
+    """Tests with thread target."""
+
+    async def test_judge_with_thread_target(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        persona_config: PersonaConfig,
+        sample_user: User,
+        sample_channel: Channel,
+    ) -> None:
+        """Test judgment with thread_ts target."""
+        thread_ts = "1234567890.000001"
+
+        thread_messages = [
+            Message(
+                id=thread_ts,
+                channel=sample_channel,
+                user=sample_user,
+                text="Parent message",
+                timestamp=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+                thread_ts=None,
+                mentions=[],
+            ),
+            Message(
+                id="1234567890.000002",
+                channel=sample_channel,
+                user=sample_user,
+                text="Thread reply needing help",
+                timestamp=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+                thread_ts=thread_ts,
+                mentions=[],
+            ),
+        ]
+
+        channel_messages = ChannelMessages(
+            channel_id=sample_channel.id,
+            channel_name=sample_channel.name,
+            top_level_messages=[],
+            thread_messages={thread_ts: thread_messages},
+        )
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            target_thread_ts=thread_ts,
+        )
+
+        await judgment.judge(context)
+
+        call_args = mock_client.complete.call_args
+        llm_messages = call_args.args[0]
+
+        user_message = next(
+            (m for m in llm_messages if m["role"] == "user"),
+            None,
+        )
+
+        assert user_message is not None
+        content = user_message["content"]
+
+        # Target message should be the latest in thread
+        assert "判定対象メッセージ" in content
+        assert "Thread reply needing help" in content

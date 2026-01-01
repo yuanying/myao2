@@ -5,10 +5,10 @@ from datetime import datetime, timedelta, timezone
 
 from myao2.application.use_cases.helpers import (
     build_context_with_memory,
-    create_bot_message,
+    create_bot_message_for_thread,
 )
 from myao2.config import Config, JudgmentSkipConfig
-from myao2.domain.entities import Channel, Message
+from myao2.domain.entities import Channel, Context
 from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
 from myao2.domain.exceptions import ChannelNotAccessibleError
@@ -95,47 +95,39 @@ class AutonomousResponseUseCase:
             await self.check_channel(channel)
 
     async def check_channel(self, channel: Channel) -> None:
-        """Check a specific channel for unreplied messages.
+        """Check a specific channel for unreplied threads.
 
         Args:
             channel: The channel to check.
         """
-        unreplied_messages = await self._channel_monitor.get_unreplied_messages(
+        unreplied_threads = await self._channel_monitor.get_unreplied_threads(
             channel_id=channel.id,
             min_wait_seconds=self._config.response.min_wait_seconds,
             max_message_age_seconds=self._config.response.max_message_age_seconds,
         )
 
-        for message in unreplied_messages:
+        for thread_ts in unreplied_threads:
             try:
                 logger.info(
-                    "Processing unreplied message %s in channel %s",
-                    message.id,
+                    "Processing unreplied thread %s in channel %s",
+                    thread_ts,
                     channel.id,
                 )
-                await self._process_message(channel, message)
+                await self._process_thread(channel, thread_ts)
             except Exception:
                 logger.exception(
-                    "Error processing message %s in channel %s",
-                    message.id,
+                    "Error processing thread %s in channel %s",
+                    thread_ts,
                     channel.id,
                 )
 
-    async def _process_message(self, channel: Channel, message: Message) -> None:
-        """Process a single message.
+    async def _process_thread(self, channel: Channel, thread_ts: str | None) -> None:
+        """Process a single thread.
 
         Args:
-            channel: The channel containing the message.
-            message: The message to process.
+            channel: The channel containing the thread.
+            thread_ts: Thread timestamp (None for top-level).
         """
-        # Check if we should skip judgment
-        if await self._should_skip_judgment(message):
-            logger.info(
-                "Skipping judgment for message %s (cache valid)",
-                message.id,
-            )
-            return
-
         # Build context with memory (reused for both judgment and response generation)
         context = await build_context_with_memory(
             memory_repository=self._memory_repository,
@@ -143,48 +135,55 @@ class AutonomousResponseUseCase:
             channel_repository=self._channel_repository,
             channel=channel,
             persona=self._config.persona,
-            target_thread_ts=message.thread_ts,
+            target_thread_ts=thread_ts,
             message_limit=self._config.response.message_limit,
         )
 
+        # Get latest message ID for cache handling
+        latest_message_id = self._get_latest_message_id(context, thread_ts)
+
+        # Check if we should skip judgment
+        if await self._should_skip_judgment(channel.id, thread_ts, latest_message_id):
+            logger.info(
+                "Skipping judgment for thread %s (cache valid)",
+                thread_ts,
+            )
+            return
+
         # Perform response judgment
-        judgment_result = await self._response_judgment.judge(
-            context=context,
-            message=message,
-        )
+        judgment_result = await self._response_judgment.judge(context=context)
 
         # Log judgment result
         logger.info(
-            "Judgment for message %s: should_respond=%s, reason=%s, confidence=%.2f",
-            message.id,
+            "Judgment for thread %s: should_respond=%s, reason=%s, confidence=%.2f",
+            thread_ts,
             judgment_result.should_respond,
             judgment_result.reason,
             judgment_result.confidence,
         )
 
         # Cache judgment result
-        await self._cache_judgment_result(message, judgment_result)
+        await self._cache_judgment_result(
+            channel.id, thread_ts, latest_message_id, judgment_result
+        )
 
         if not judgment_result.should_respond:
             return
 
         # Generate response using the same context
-        response_text = await self._response_generator.generate(
-            user_message=message,
-            context=context,
-        )
+        response_text = await self._response_generator.generate(context=context)
 
         # Send response
         logger.info(
             "Sending autonomous response to channel %s (thread_ts=%s)",
             channel.id,
-            message.thread_ts,
+            thread_ts,
         )
         try:
             await self._messaging_service.send_message(
                 channel_id=channel.id,
                 text=response_text,
-                thread_ts=message.thread_ts,
+                thread_ts=thread_ts,
             )
         except ChannelNotAccessibleError:
             logger.warning(
@@ -196,16 +195,48 @@ class AutonomousResponseUseCase:
             return
 
         # Save bot response message
-        bot_message = create_bot_message(
-            response_text, message, self._bot_user_id, self._config.persona.name
+        bot_message = create_bot_message_for_thread(
+            response_text,
+            channel,
+            thread_ts,
+            self._bot_user_id,
+            self._config.persona.name,
         )
         await self._message_repository.save(bot_message)
 
-    async def _should_skip_judgment(self, message: Message) -> bool:
+    def _get_latest_message_id(
+        self, context: Context, thread_ts: str | None
+    ) -> str | None:
+        """Get the latest message ID from context.
+
+        Args:
+            context: Conversation context.
+            thread_ts: Thread timestamp (None for top-level).
+
+        Returns:
+            Latest message ID or None if not found.
+        """
+        if thread_ts is None:
+            messages = context.conversation_history.top_level_messages
+        else:
+            messages = context.conversation_history.get_thread(thread_ts)
+
+        if messages:
+            return max(messages, key=lambda m: m.timestamp).id
+        return None
+
+    async def _should_skip_judgment(
+        self,
+        channel_id: str,
+        thread_ts: str | None,
+        latest_message_id: str | None,
+    ) -> bool:
         """Check if judgment should be skipped based on cache.
 
         Args:
-            message: The message to check.
+            channel_id: The channel ID.
+            thread_ts: Thread timestamp (None for top-level).
+            latest_message_id: The latest message ID in the thread.
 
         Returns:
             True if judgment should be skipped, False otherwise.
@@ -214,31 +245,40 @@ class AutonomousResponseUseCase:
         if skip_config is None or not skip_config.enabled:
             return False
 
+        if latest_message_id is None:
+            return False
+
         cache = await self._judgment_cache_repository.find_by_scope(
-            channel_id=message.channel.id,
-            thread_ts=message.thread_ts,
+            channel_id=channel_id,
+            thread_ts=thread_ts,
         )
 
         if cache is None:
             return False
 
         current_time = datetime.now(timezone.utc)
-        # message.id is the latest message timestamp
-        return cache.is_valid(current_time, message.id)
+        return cache.is_valid(current_time, latest_message_id)
 
     async def _cache_judgment_result(
         self,
-        message: Message,
+        channel_id: str,
+        thread_ts: str | None,
+        latest_message_id: str | None,
         result: JudgmentResult,
     ) -> None:
         """Cache judgment result.
 
         Args:
-            message: The message that was judged.
+            channel_id: The channel ID.
+            thread_ts: Thread timestamp (None for top-level).
+            latest_message_id: The latest message ID in the thread.
             result: The judgment result.
         """
         skip_config = self._config.response.judgment_skip
         if skip_config is None or not skip_config.enabled:
+            return
+
+        if latest_message_id is None:
             return
 
         current_time = datetime.now(timezone.utc)
@@ -246,12 +286,12 @@ class AutonomousResponseUseCase:
         next_check_at = current_time + timedelta(seconds=skip_seconds)
 
         cache = JudgmentCache(
-            channel_id=message.channel.id,
-            thread_ts=message.thread_ts,
+            channel_id=channel_id,
+            thread_ts=thread_ts,
             should_respond=result.should_respond,
             confidence=result.confidence,
             reason=result.reason,
-            latest_message_ts=message.id,
+            latest_message_ts=latest_message_id,
             next_check_at=next_check_at,
             created_at=current_time,
             updated_at=current_time,

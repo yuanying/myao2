@@ -110,16 +110,16 @@ class SlackChannelMonitor:
             logger.warning(f"Failed to get messages from channel {channel_id}: {e}")
             return []
 
-    async def get_unreplied_messages(
+    async def get_unreplied_threads(
         self,
         channel_id: str,
         min_wait_seconds: int,
         max_message_age_seconds: int | None = None,
-    ) -> list[Message]:
-        """Get unreplied messages from a channel.
+    ) -> list[str | None]:
+        """Get unreplied threads from a channel.
 
-        Finds messages that:
-        - Are older than min_wait_seconds
+        Finds threads that:
+        - Have messages older than min_wait_seconds
         - Are not older than max_message_age_seconds (if specified)
         - Are not from the bot itself
         - Have not been replied to by the bot
@@ -131,7 +131,7 @@ class SlackChannelMonitor:
                 Messages older than this are excluded. None means no limit.
 
         Returns:
-            List of unreplied messages.
+            List of thread_ts (None for top-level, no duplicates).
         """
         try:
             response = await self._client.conversations_history(
@@ -165,7 +165,8 @@ class SlackChannelMonitor:
                 if msg.user.id == self._bot_user_id:
                     bot_message_times.append(msg.timestamp.timestamp())
 
-            unreplied_messages: list[Message] = []
+            # Use set to avoid duplicates
+            unreplied_threads: set[str | None] = set()
 
             for msg in all_messages:
                 # Skip if bot's own message
@@ -198,13 +199,13 @@ class SlackChannelMonitor:
                             break
 
                 if not bot_replied:
-                    unreplied_messages.append(msg)
+                    unreplied_threads.add(msg.thread_ts)  # None or thread_ts
 
-            return unreplied_messages
+            return list(unreplied_threads)
 
         except Exception as e:
             logger.warning(
-                f"Failed to get unreplied messages from channel {channel_id}: {e}"
+                f"Failed to get unreplied threads from channel {channel_id}: {e}"
             )
             return []
 

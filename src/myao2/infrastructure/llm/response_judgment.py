@@ -55,20 +55,31 @@ class LLMResponseJudgment:
         """
         self._client = client
 
-    async def judge(self, context: Context, message: Message) -> JudgmentResult:
+    async def judge(self, context: Context) -> JudgmentResult:
         """Determine whether to respond.
+
+        The target thread/message is identified by context.target_thread_ts.
 
         Args:
             context: Conversation context.
-            message: Target message to judge.
 
         Returns:
             Judgment result.
         """
         current_time = datetime.now(timezone.utc)
 
+        # Get target message from context
+        target_message = self._get_target_message(context)
+        if target_message is None:
+            logger.warning("No target message found in context")
+            return JudgmentResult(
+                should_respond=False,
+                reason="No target message found",
+                confidence=0.0,
+            )
+
         try:
-            messages = self._build_messages(context, message, current_time)
+            messages = self._build_messages(context, target_message, current_time)
             response = await self._client.complete(messages)
             logger.debug("LLM judgment response: %s", response)
             result = self._parse_response(response)
@@ -84,6 +95,30 @@ class LLMResponseJudgment:
                 should_respond=False,
                 reason=f"LLM error: {e}",
             )
+
+    def _get_target_message(self, context: Context) -> Message | None:
+        """Get the target message from context.
+
+        The target message is the latest message in the target thread/top-level.
+
+        Args:
+            context: Conversation context.
+
+        Returns:
+            Target message or None if not found.
+        """
+        target_thread_ts = context.target_thread_ts
+
+        if target_thread_ts is None:
+            # Top-level: latest message from top_level_messages
+            messages = context.conversation_history.top_level_messages
+        else:
+            # Thread: latest message from the specified thread
+            messages = context.conversation_history.get_thread(target_thread_ts)
+
+        if messages:
+            return max(messages, key=lambda m: m.timestamp)
+        return None
 
     def _build_messages(
         self,

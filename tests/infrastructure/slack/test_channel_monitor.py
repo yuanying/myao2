@@ -230,13 +230,13 @@ class TestGetRecentMessages(TestSlackChannelMonitor):
         assert messages[1].text == "Normal2"
 
 
-class TestGetUnrepliedMessages(TestSlackChannelMonitor):
-    """Tests for get_unreplied_messages."""
+class TestGetUnrepliedThreads(TestSlackChannelMonitor):
+    """Tests for get_unreplied_threads."""
 
-    async def test_unreplied_message_after_wait_time(
+    async def test_unreplied_thread_after_wait_time(
         self, monitor: SlackChannelMonitor, mock_client: MagicMock
     ) -> None:
-        """Test that messages past wait time and not replied are returned."""
+        """Test that threads past wait time and not replied are returned."""
         now = datetime.now(timezone.utc)
         old_ts = (now - timedelta(seconds=400)).timestamp()
 
@@ -250,12 +250,13 @@ class TestGetUnrepliedMessages(TestSlackChannelMonitor):
             "user": {"id": "U111", "name": "user1", "is_bot": False}
         }
 
-        messages = await monitor.get_unreplied_messages(
+        threads = await monitor.get_unreplied_threads(
             channel_id="C123456", min_wait_seconds=300
         )
 
-        assert len(messages) == 1
-        assert messages[0].text == "Hello?"
+        # Returns None for top-level unreplied
+        assert len(threads) == 1
+        assert threads[0] is None
 
     async def test_message_within_wait_time_not_returned(
         self, monitor: SlackChannelMonitor, mock_client: MagicMock
@@ -274,11 +275,11 @@ class TestGetUnrepliedMessages(TestSlackChannelMonitor):
             "user": {"id": "U111", "name": "user1", "is_bot": False}
         }
 
-        messages = await monitor.get_unreplied_messages(
+        threads = await monitor.get_unreplied_threads(
             channel_id="C123456", min_wait_seconds=300
         )
 
-        assert len(messages) == 0
+        assert len(threads) == 0
 
     async def test_bot_own_message_not_returned(
         self, monitor: SlackChannelMonitor, mock_client: MagicMock
@@ -299,11 +300,11 @@ class TestGetUnrepliedMessages(TestSlackChannelMonitor):
             "user": {"id": "UBOT123", "name": "myao", "is_bot": True}
         }
 
-        messages = await monitor.get_unreplied_messages(
+        threads = await monitor.get_unreplied_threads(
             channel_id="C123456", min_wait_seconds=300
         )
 
-        assert len(messages) == 0
+        assert len(threads) == 0
 
     async def test_message_with_bot_reply_not_returned(
         self, monitor: SlackChannelMonitor, mock_client: MagicMock
@@ -329,12 +330,12 @@ class TestGetUnrepliedMessages(TestSlackChannelMonitor):
 
         mock_client.users_info.side_effect = user_info_side_effect
 
-        messages = await monitor.get_unreplied_messages(
+        threads = await monitor.get_unreplied_threads(
             channel_id="C123456", min_wait_seconds=300
         )
 
         # Bot already replied after the user's message
-        assert len(messages) == 0
+        assert len(threads) == 0
 
     async def test_thread_message_with_bot_reply_not_returned(
         self, monitor: SlackChannelMonitor, mock_client: MagicMock
@@ -384,11 +385,11 @@ class TestGetUnrepliedMessages(TestSlackChannelMonitor):
 
         mock_client.users_info.side_effect = user_info_side_effect
 
-        messages = await monitor.get_unreplied_messages(
+        threads = await monitor.get_unreplied_threads(
             channel_id="C123456", min_wait_seconds=300
         )
 
-        assert len(messages) == 0
+        assert len(threads) == 0
 
     async def test_api_error_returns_empty(
         self, monitor: SlackChannelMonitor, mock_client: MagicMock
@@ -399,8 +400,8 @@ class TestGetUnrepliedMessages(TestSlackChannelMonitor):
             response={"error": "channel_not_found"},
         )
 
-        messages = await monitor.get_unreplied_messages(
+        threads = await monitor.get_unreplied_threads(
             channel_id="C123456", min_wait_seconds=300
         )
 
-        assert messages == []
+        assert threads == []

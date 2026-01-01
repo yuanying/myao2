@@ -64,16 +64,15 @@ class DBChannelMonitor:
             )
         return await self._message_repository.find_by_channel(channel_id, limit)
 
-    async def get_unreplied_messages(
+    async def get_unreplied_threads(
         self,
         channel_id: str,
         min_wait_seconds: int,
         max_message_age_seconds: int | None = None,
-    ) -> list[Message]:
-        """未応答メッセージを DB から取得する
+    ) -> list[str | None]:
+        """未応答スレッドのタイムスタンプリストを DB から取得する
 
-        指定時間以上経過し、かつボットが応答していないメッセージを取得する。
-        スレッド内のメッセージも含む。
+        指定時間以上経過し、かつボットが応答していないスレッドを取得する。
 
         Args:
             channel_id: チャンネル ID
@@ -82,7 +81,10 @@ class DBChannelMonitor:
                 この時間より古いメッセージは除外する。None の場合は制限なし。
 
         Returns:
-            未応答メッセージリスト
+            未応答スレッドの thread_ts リスト
+            - スレッド内: 親メッセージの thread_ts
+            - トップレベル: None
+            - 重複する thread_ts は含まれない
         """
         now = datetime.now(timezone.utc)
         cutoff_ts = (now - timedelta(seconds=min_wait_seconds)).timestamp()
@@ -126,7 +128,7 @@ class DBChannelMonitor:
                 # 純粋なトップレベルメッセージ
                 channel_messages.append(msg)
 
-        unreplied_messages: list[Message] = []
+        unreplied_threads: list[str | None] = []
 
         # トップレベルメッセージの処理
         # 最新メッセージがボットでなく、時間条件を満たす場合のみ追加
@@ -136,7 +138,7 @@ class DBChannelMonitor:
                 latest_msg.user.id != self._bot_user_id
                 and latest_msg.timestamp.timestamp() <= cutoff_ts
             ):
-                unreplied_messages.append(latest_msg)
+                unreplied_threads.append(None)  # トップレベルは None
 
         # スレッド内メッセージの処理
         for thread_ts, messages in thread_messages.items():
@@ -147,6 +149,6 @@ class DBChannelMonitor:
                 latest_msg.user.id != self._bot_user_id
                 and latest_msg.timestamp.timestamp() <= cutoff_ts
             ):
-                unreplied_messages.append(latest_msg)
+                unreplied_threads.append(thread_ts)
 
-        return unreplied_messages
+        return unreplied_threads

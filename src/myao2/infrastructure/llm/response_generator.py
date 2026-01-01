@@ -5,7 +5,7 @@ from datetime import datetime
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
-from myao2.domain.entities import Context, Message
+from myao2.domain.entities import Context
 from myao2.infrastructure.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -64,17 +64,14 @@ class LiteLLMResponseGenerator:
 
     async def generate(
         self,
-        user_message: Message,
         context: Context,
     ) -> str:
         """Generate a response.
 
-        Builds a system prompt from context and user message,
-        then sends it to the LLM.
+        Builds a system prompt from context, then sends it to the LLM.
 
         Args:
-            user_message: User's message to respond to.
-            context: Conversation context (history, persona info).
+            context: Conversation context (history, persona info, target_thread_ts).
 
         Returns:
             Generated response text.
@@ -82,7 +79,7 @@ class LiteLLMResponseGenerator:
         Raises:
             LLMError: If response generation fails.
         """
-        system_prompt = self._build_system_prompt(context, user_message)
+        system_prompt = self._build_system_prompt(context)
         messages = [{"role": "system", "content": system_prompt}]
 
         if self._should_log():
@@ -95,14 +92,13 @@ class LiteLLMResponseGenerator:
 
         return response
 
-    def _build_system_prompt(self, context: Context, current_message: Message) -> str:
-        """Build system prompt from context and current message.
+    def _build_system_prompt(self, context: Context) -> str:
+        """Build system prompt from context.
 
         Uses Jinja2 template to construct the prompt with memory integration.
 
         Args:
             context: Conversation context.
-            current_message: Current user message to respond to.
 
         Returns:
             Complete system prompt string.

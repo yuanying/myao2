@@ -39,16 +39,15 @@ class ChannelMonitor(Protocol):
         """
         ...
 
-    async def get_unreplied_messages(
+    async def get_unreplied_threads(
         self,
         channel_id: str,
         min_wait_seconds: int,
         max_message_age_seconds: int | None = None,
-    ) -> list[Message]:
-        """未応答メッセージを取得する
+    ) -> list[str | None]:
+        """未応答スレッドのタイムスタンプリストを取得する
 
-        指定時間以上経過し、かつボットが応答していないメッセージを取得する。
-        スレッド内のメッセージも含む。
+        指定時間以上経過し、かつボットが応答していないスレッドを取得する。
 
         Args:
             channel_id: チャンネル ID
@@ -57,6 +56,9 @@ class ChannelMonitor(Protocol):
                 この時間より古いメッセージは除外する。None の場合は制限なし。
 
         Returns:
-            未応答メッセージリスト
+            未応答スレッドの thread_ts リスト
+            - スレッド内: 親メッセージの thread_ts
+            - トップレベル: None
+            - 重複する thread_ts は含まれない
         """
         ...

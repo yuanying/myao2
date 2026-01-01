@@ -35,7 +35,7 @@ def mock_channel_monitor() -> Mock:
     """Create mock channel monitor."""
     monitor = Mock()
     monitor.get_channels = AsyncMock(return_value=[])
-    monitor.get_unreplied_messages = AsyncMock(return_value=[])
+    monitor.get_unreplied_threads = AsyncMock(return_value=[])
     monitor.get_recent_messages = AsyncMock(return_value=[])
     return monitor
 
@@ -194,7 +194,7 @@ class TestAutonomousResponseUseCaseExecute:
         mock_channel_monitor.get_channels.assert_awaited_once()
         mock_messaging_service.send_message.assert_not_awaited()
 
-    async def test_no_unreplied_messages_does_nothing(
+    async def test_no_unreplied_threads_does_nothing(
         self,
         use_case: AutonomousResponseUseCase,
         mock_channel_monitor: Mock,
@@ -202,13 +202,13 @@ class TestAutonomousResponseUseCaseExecute:
         mock_response_judgment: Mock,
         channel: Channel,
     ) -> None:
-        """Test that nothing happens when no unreplied messages exist."""
+        """Test that nothing happens when no unreplied threads exist."""
         mock_channel_monitor.get_channels.return_value = [channel]
-        mock_channel_monitor.get_unreplied_messages.return_value = []
+        mock_channel_monitor.get_unreplied_threads.return_value = []
 
         await use_case.execute()
 
-        mock_channel_monitor.get_unreplied_messages.assert_awaited_once_with(
+        mock_channel_monitor.get_unreplied_threads.assert_awaited_once_with(
             channel_id=channel.id,
             min_wait_seconds=300,
             max_message_age_seconds=43200,
@@ -238,7 +238,10 @@ class TestAutonomousResponseUseCaseExecute:
             mentions=[],
         )
         mock_channel_monitor.get_channels.return_value = [channel]
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        # Return thread_ts (None for top-level)
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        # Set up message repository to return the message
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=True,
             reason="Interesting conversation",
@@ -264,6 +267,7 @@ class TestAutonomousResponseUseCaseExecute:
         mock_response_judgment: Mock,
         mock_response_generator: Mock,
         mock_messaging_service: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -278,7 +282,8 @@ class TestAutonomousResponseUseCaseExecute:
             mentions=[],
         )
         mock_channel_monitor.get_channels.return_value = [channel]
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=False,
             reason="Not interesting enough",
@@ -295,16 +300,17 @@ class TestAutonomousResponseUseCaseExecute:
 class TestAutonomousResponseUseCaseCheckChannel:
     """Tests for check_channel method."""
 
-    async def test_multiple_messages_judged_separately(
+    async def test_multiple_threads_judged_separately(
         self,
         use_case: AutonomousResponseUseCase,
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
     ) -> None:
-        """Test that multiple messages are judged separately."""
+        """Test that multiple threads are judged separately."""
         message1 = Message(
             id="M001",
             channel=channel,
@@ -319,9 +325,12 @@ class TestAutonomousResponseUseCaseCheckChannel:
             user=user,
             text="Second message",
             timestamp=timestamp,
+            thread_ts="thread_1",
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message1, message2]
+        # Return two threads: None (top-level) and "thread_1"
+        mock_channel_monitor.get_unreplied_threads.return_value = [None, "thread_1"]
+        mock_message_repository.find_all_in_channel.return_value = [message1, message2]
 
         await use_case.check_channel(channel)
 
@@ -332,12 +341,13 @@ class TestAutonomousResponseUseCaseCheckChannel:
         use_case: AutonomousResponseUseCase,
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Test that error in judgment doesn't stop processing other messages."""
+        """Test that error in judgment doesn't stop processing other threads."""
         message1 = Message(
             id="M001",
             channel=channel,
@@ -352,9 +362,11 @@ class TestAutonomousResponseUseCaseCheckChannel:
             user=user,
             text="Second message",
             timestamp=timestamp,
+            thread_ts="thread_1",
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message1, message2]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None, "thread_1"]
+        mock_message_repository.find_all_in_channel.return_value = [message1, message2]
 
         # First call raises error, second succeeds
         mock_response_judgment.judge.side_effect = [
@@ -367,10 +379,10 @@ class TestAutonomousResponseUseCaseCheckChannel:
         with caplog.at_level(logging.ERROR):
             await use_case.check_channel(channel)
 
-        # Both messages should be attempted
+        # Both threads should be attempted
         assert mock_response_judgment.judge.await_count == 2
         # Error should be logged
-        assert "Error processing message M001" in caplog.text
+        assert "Error processing thread None" in caplog.text
 
     async def test_thread_message_replies_to_thread(
         self,
@@ -378,6 +390,7 @@ class TestAutonomousResponseUseCaseCheckChannel:
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
         mock_messaging_service: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -393,7 +406,8 @@ class TestAutonomousResponseUseCaseCheckChannel:
             thread_ts=thread_ts,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [thread_ts]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=True,
             reason="Reply needed",
@@ -418,6 +432,7 @@ class TestAutonomousResponseUseCaseContextBuilding:
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
         mock_response_generator: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -433,7 +448,8 @@ class TestAutonomousResponseUseCaseContextBuilding:
         )
 
         mock_channel_monitor.get_channels.return_value = [channel]
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=True,
             reason="Reply needed",
@@ -477,7 +493,8 @@ class TestAutonomousResponseUseCaseMessageSaving:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=True,
             reason="Reply needed",
@@ -503,6 +520,7 @@ class TestAutonomousResponseUseCaseLogging:
         use_case: AutonomousResponseUseCase,
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -517,7 +535,8 @@ class TestAutonomousResponseUseCaseLogging:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=False,
             reason="Not interesting",
@@ -535,6 +554,7 @@ class TestAutonomousResponseUseCaseLogging:
         use_case: AutonomousResponseUseCase,
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -549,7 +569,8 @@ class TestAutonomousResponseUseCaseLogging:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=True,
             reason="Reply needed",
@@ -674,6 +695,7 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
         mock_judgment_cache_repository: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -687,7 +709,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=False,
             reason="Not interesting",
@@ -707,6 +730,7 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
         mock_judgment_cache_repository: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -720,7 +744,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_judgment_cache_repository.find_by_scope.return_value = None
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=False,
@@ -741,6 +766,7 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
         mock_judgment_cache_repository: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -754,7 +780,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
 
         # Create a valid cache (future next_check_at, same message)
         valid_cache = JudgmentCache(
@@ -781,6 +808,7 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
         mock_judgment_cache_repository: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -794,7 +822,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
 
         # Create an expired cache
         expired_cache = JudgmentCache(
@@ -828,6 +857,7 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
         mock_judgment_cache_repository: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -841,7 +871,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
 
         # Create a cache with different message ID
         stale_cache = JudgmentCache(
@@ -874,6 +905,7 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
         mock_judgment_cache_repository: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -887,7 +919,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_judgment_cache_repository.find_by_scope.return_value = None
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=False,
@@ -913,6 +946,7 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
         mock_judgment_cache_repository: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -926,7 +960,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_judgment_cache_repository.find_by_scope.return_value = None
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=False,
@@ -950,6 +985,7 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
         mock_judgment_cache_repository: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -963,7 +999,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_judgment_cache_repository.find_by_scope.return_value = None
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=False,
@@ -992,6 +1029,7 @@ class TestAutonomousResponseUseCaseChannelNotAccessible:
         mock_response_judgment: Mock,
         mock_messaging_service: Mock,
         mock_channel_repository: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -1005,7 +1043,8 @@ class TestAutonomousResponseUseCaseChannelNotAccessible:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=True,
             reason="Reply needed",
@@ -1041,7 +1080,8 @@ class TestAutonomousResponseUseCaseChannelNotAccessible:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=True,
             reason="Reply needed",
@@ -1062,6 +1102,7 @@ class TestAutonomousResponseUseCaseChannelNotAccessible:
         mock_channel_monitor: Mock,
         mock_response_judgment: Mock,
         mock_messaging_service: Mock,
+        mock_message_repository: Mock,
         channel: Channel,
         user: User,
         timestamp: datetime,
@@ -1076,7 +1117,8 @@ class TestAutonomousResponseUseCaseChannelNotAccessible:
             timestamp=timestamp,
             mentions=[],
         )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
+        mock_channel_monitor.get_unreplied_threads.return_value = [None]
+        mock_message_repository.find_all_in_channel.return_value = [message]
         mock_response_judgment.judge.return_value = JudgmentResult(
             should_respond=True,
             reason="Reply needed",

@@ -185,17 +185,17 @@ class TestGetRecentMessages:
         assert result == []
 
 
-class TestGetUnrepliedMessages:
-    """get_unreplied_messages method tests."""
+class TestGetUnrepliedThreads:
+    """get_unreplied_threads method tests."""
 
-    async def test_get_unreplied_messages_basic(
+    async def test_get_unreplied_threads_basic(
         self,
         monitor: DBChannelMonitor,
         message_repository: SQLiteMessageRepository,
     ) -> None:
-        """Test getting unreplied messages."""
+        """Test getting unreplied threads (top-level returns None)."""
         now = datetime.now(timezone.utc)
-        # Message older than min_wait_seconds
+        # Message older than min_wait_seconds (top-level)
         old_message = create_test_message(
             id="1.001",
             user_id="U111",
@@ -203,12 +203,13 @@ class TestGetUnrepliedMessages:
         )
         await message_repository.save(old_message)
 
-        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+        result = await monitor.get_unreplied_threads("C123456", min_wait_seconds=60)
 
+        # Top-level message returns None
         assert len(result) == 1
-        assert result[0].id == "1.001"
+        assert result[0] is None
 
-    async def test_get_unreplied_messages_excludes_recent(
+    async def test_get_unreplied_threads_excludes_recent(
         self,
         monitor: DBChannelMonitor,
         message_repository: SQLiteMessageRepository,
@@ -223,11 +224,11 @@ class TestGetUnrepliedMessages:
         )
         await message_repository.save(recent_message)
 
-        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+        result = await monitor.get_unreplied_threads("C123456", min_wait_seconds=60)
 
         assert result == []
 
-    async def test_get_unreplied_messages_excludes_bot_messages(
+    async def test_get_unreplied_threads_excludes_bot_messages(
         self,
         monitor: DBChannelMonitor,
         message_repository: SQLiteMessageRepository,
@@ -243,11 +244,11 @@ class TestGetUnrepliedMessages:
         )
         await message_repository.save(bot_message)
 
-        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+        result = await monitor.get_unreplied_threads("C123456", min_wait_seconds=60)
 
         assert result == []
 
-    async def test_get_unreplied_messages_excludes_replied_messages(
+    async def test_get_unreplied_threads_excludes_replied_messages(
         self,
         monitor: DBChannelMonitor,
         message_repository: SQLiteMessageRepository,
@@ -270,11 +271,11 @@ class TestGetUnrepliedMessages:
         await message_repository.save(user_message)
         await message_repository.save(bot_reply)
 
-        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+        result = await monitor.get_unreplied_threads("C123456", min_wait_seconds=60)
 
         assert result == []
 
-    async def test_get_unreplied_messages_includes_message_after_bot_reply(
+    async def test_get_unreplied_threads_includes_message_after_bot_reply(
         self,
         monitor: DBChannelMonitor,
         message_repository: SQLiteMessageRepository,
@@ -297,17 +298,18 @@ class TestGetUnrepliedMessages:
         await message_repository.save(bot_reply)
         await message_repository.save(user_message)
 
-        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+        result = await monitor.get_unreplied_threads("C123456", min_wait_seconds=60)
 
+        # Top-level returns None
         assert len(result) == 1
-        assert result[0].id == "1.002"
+        assert result[0] is None
 
-    async def test_get_unreplied_messages_includes_thread_replies(
+    async def test_get_unreplied_threads_includes_thread_replies(
         self,
         monitor: DBChannelMonitor,
         message_repository: SQLiteMessageRepository,
     ) -> None:
-        """Test that unreplied thread reply messages are included."""
+        """Test that unreplied thread returns thread_ts."""
         now = datetime.now(timezone.utc)
         # Thread parent message
         parent_message = create_test_message(
@@ -326,20 +328,18 @@ class TestGetUnrepliedMessages:
         await message_repository.save(parent_message)
         await message_repository.save(thread_reply)
 
-        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+        result = await monitor.get_unreplied_threads("C123456", min_wait_seconds=60)
 
-        # Thread's latest message (thread reply) should be included
-        # Parent message is grouped with thread, so only latest is returned
+        # Thread returns thread_ts
         assert len(result) == 1
-        result_ids = {m.id for m in result}
-        assert "1.001" in result_ids
+        assert "1.000" in result
 
-    async def test_get_unreplied_messages_excludes_thread_replies_with_bot_reply(
+    async def test_get_unreplied_threads_excludes_thread_with_bot_reply(
         self,
         monitor: DBChannelMonitor,
         message_repository: SQLiteMessageRepository,
     ) -> None:
-        """Test that thread reply messages with bot reply are excluded."""
+        """Test that threads with bot reply are excluded."""
         now = datetime.now(timezone.utc)
         # Thread parent message
         parent_message = create_test_message(
@@ -367,13 +367,12 @@ class TestGetUnrepliedMessages:
         await message_repository.save(thread_reply)
         await message_repository.save(bot_thread_reply)
 
-        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+        result = await monitor.get_unreplied_threads("C123456", min_wait_seconds=60)
 
-        # Thread reply should be excluded (bot replied in thread)
-        result_ids = {m.id for m in result}
-        assert "1.001" not in result_ids
+        # Thread should be excluded (bot replied in thread)
+        assert "1.000" not in result
 
-    async def test_get_unreplied_messages_excludes_old_messages(
+    async def test_get_unreplied_threads_excludes_old_messages(
         self,
         monitor: DBChannelMonitor,
         message_repository: SQLiteMessageRepository,
@@ -395,17 +394,17 @@ class TestGetUnrepliedMessages:
         await message_repository.save(old_message)
         await message_repository.save(recent_message)
 
-        result = await monitor.get_unreplied_messages(
+        result = await monitor.get_unreplied_threads(
             "C123456",
             min_wait_seconds=60,
             max_message_age_seconds=86400,  # 24 hours
         )
 
-        # Only recent message should be included
+        # Only recent message should be included (returns None for top-level)
         assert len(result) == 1
-        assert result[0].id == "1.002"
+        assert result[0] is None
 
-    async def test_get_unreplied_messages_without_max_age(
+    async def test_get_unreplied_threads_without_max_age(
         self,
         monitor: DBChannelMonitor,
         message_repository: SQLiteMessageRepository,
@@ -420,17 +419,17 @@ class TestGetUnrepliedMessages:
         )
         await message_repository.save(old_message)
 
-        result = await monitor.get_unreplied_messages(
+        result = await monitor.get_unreplied_threads(
             "C123456",
             min_wait_seconds=60,
             max_message_age_seconds=None,  # No limit
         )
 
-        # Old message should be included
+        # Old message should be included (returns None for top-level)
         assert len(result) == 1
-        assert result[0].id == "1.001"
+        assert result[0] is None
 
-    async def test_get_unreplied_messages_thread_bot_reply_does_not_affect_channel(
+    async def test_get_unreplied_threads_bot_reply_in_thread_does_not_affect_channel(
         self,
         monitor: DBChannelMonitor,
         message_repository: SQLiteMessageRepository,
@@ -463,13 +462,12 @@ class TestGetUnrepliedMessages:
         await message_repository.save(thread_parent)
         await message_repository.save(bot_thread_reply)
 
-        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+        result = await monitor.get_unreplied_threads("C123456", min_wait_seconds=60)
 
-        # Channel message should still be unreplied
-        result_ids = {m.id for m in result}
-        assert "1.001" in result_ids
+        # Channel message should still be unreplied (returns None for top-level)
+        assert None in result
 
-    async def test_get_unreplied_messages_thread_parent_replied_by_bot(
+    async def test_get_unreplied_threads_thread_parent_replied_by_bot(
         self,
         monitor: DBChannelMonitor,
         message_repository: SQLiteMessageRepository,
@@ -494,8 +492,76 @@ class TestGetUnrepliedMessages:
         await message_repository.save(thread_parent)
         await message_repository.save(bot_thread_reply)
 
-        result = await monitor.get_unreplied_messages("C123456", min_wait_seconds=60)
+        result = await monitor.get_unreplied_threads("C123456", min_wait_seconds=60)
 
-        # Thread parent should NOT be in unreplied (bot replied in thread)
-        result_ids = {m.id for m in result}
-        assert "1.000" not in result_ids
+        # Thread should NOT be in unreplied (bot replied in thread)
+        assert "1.000" not in result
+
+    async def test_get_unreplied_threads_no_duplicates(
+        self,
+        monitor: DBChannelMonitor,
+        message_repository: SQLiteMessageRepository,
+    ) -> None:
+        """Test that same thread_ts is not returned multiple times."""
+        now = datetime.now(timezone.utc)
+        # Thread parent message
+        parent_message = create_test_message(
+            id="1.000",
+            user_id="U111",
+            timestamp=now - timedelta(minutes=30),
+            thread_ts=None,
+        )
+        # Multiple thread replies
+        for i in range(3):
+            thread_reply = create_test_message(
+                id=f"1.00{i + 1}",
+                user_id=f"U{i + 1}",
+                timestamp=now - timedelta(minutes=20 - i),
+                thread_ts="1.000",
+            )
+            await message_repository.save(thread_reply)
+        await message_repository.save(parent_message)
+
+        result = await monitor.get_unreplied_threads("C123456", min_wait_seconds=60)
+
+        # Should have only one entry for the thread
+        assert result.count("1.000") == 1
+
+    async def test_get_unreplied_threads_mixed_thread_and_toplevel(
+        self,
+        monitor: DBChannelMonitor,
+        message_repository: SQLiteMessageRepository,
+    ) -> None:
+        """Test with both thread and top-level unreplied messages."""
+        now = datetime.now(timezone.utc)
+        # Top-level message
+        top_level = create_test_message(
+            id="2.000",
+            user_id="U111",
+            timestamp=now - timedelta(minutes=15),
+            thread_ts=None,
+        )
+        # Thread parent message
+        thread_parent = create_test_message(
+            id="1.000",
+            user_id="U222",
+            timestamp=now - timedelta(minutes=30),
+            thread_ts=None,
+        )
+        # Thread reply
+        thread_reply = create_test_message(
+            id="1.001",
+            user_id="U333",
+            timestamp=now - timedelta(minutes=10),
+            thread_ts="1.000",
+        )
+        await message_repository.save(top_level)
+        await message_repository.save(thread_parent)
+        await message_repository.save(thread_reply)
+
+        result = await monitor.get_unreplied_threads("C123456", min_wait_seconds=60)
+
+        # Should have both None (top-level) and thread_ts
+        assert len(result) == 2
+        assert None in result
+        assert "1.000" in result
