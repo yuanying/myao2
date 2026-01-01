@@ -4,19 +4,19 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from myao2.application.use_cases.helpers import (
-    build_channel_messages,
+    build_context_with_memory,
     create_bot_message,
 )
 from myao2.config import Config, JudgmentSkipConfig
-from myao2.domain.entities import Channel, Context, Message
+from myao2.domain.entities import Channel, Message
 from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
 from myao2.domain.exceptions import ChannelNotAccessibleError
 from myao2.domain.repositories import ChannelRepository, MessageRepository
 from myao2.domain.repositories.judgment_cache_repository import JudgmentCacheRepository
+from myao2.domain.repositories.memory_repository import MemoryRepository
 from myao2.domain.services import (
     ChannelSyncService,
-    ConversationHistoryService,
     MessagingService,
     ResponseGenerator,
 )
@@ -41,10 +41,10 @@ class AutonomousResponseUseCase:
         messaging_service: MessagingService,
         message_repository: MessageRepository,
         judgment_cache_repository: JudgmentCacheRepository,
-        conversation_history_service: ConversationHistoryService,
+        channel_repository: ChannelRepository,
+        memory_repository: MemoryRepository,
         config: Config,
         bot_user_id: str,
-        channel_repository: ChannelRepository | None = None,
         channel_sync_service: ChannelSyncService | None = None,
     ) -> None:
         """Initialize the use case.
@@ -56,10 +56,10 @@ class AutonomousResponseUseCase:
             messaging_service: Service for sending messages.
             message_repository: Repository for storing messages.
             judgment_cache_repository: Repository for judgment cache.
-            conversation_history_service: Service for fetching conversation history.
+            channel_repository: Repository for channel operations.
+            memory_repository: Repository for memory access.
             config: Application configuration.
             bot_user_id: The bot's user ID.
-            channel_repository: Repository for channel operations (optional).
             channel_sync_service: Service for channel synchronization (optional).
         """
         self._channel_monitor = channel_monitor
@@ -68,10 +68,10 @@ class AutonomousResponseUseCase:
         self._messaging_service = messaging_service
         self._message_repository = message_repository
         self._judgment_cache_repository = judgment_cache_repository
-        self._conversation_history_service = conversation_history_service
+        self._channel_repository = channel_repository
+        self._memory_repository = memory_repository
         self._config = config
         self._bot_user_id = bot_user_id
-        self._channel_repository = channel_repository
         self._channel_sync_service = channel_sync_service
 
     async def execute(self) -> None:
@@ -136,29 +136,20 @@ class AutonomousResponseUseCase:
             )
             return
 
-        # Get conversation history
-        conversation_history = await self._get_conversation_history(message)
-
-        # TODO(task-08): Build proper ChannelMessages with full channel context
-        # Currently only includes thread or recent channel messages,
-        # not full channel structure.
-        # Task 08 will implement proper ChannelMessages construction with:
-        # - Full channel message structure (top-level + thread separation)
-        # - workspace_long_term_memory, workspace_short_term_memory
-        # - channel_memories with long/short term memories
-        # - thread_memories for recent thread summaries
-        channel_messages = build_channel_messages(conversation_history, channel)
-
-        # Build context for judgment (without auxiliary context)
-        judgment_context = Context(
+        # Build context with memory (reused for both judgment and response generation)
+        context = await build_context_with_memory(
+            memory_repository=self._memory_repository,
+            message_repository=self._message_repository,
+            channel_repository=self._channel_repository,
+            channel=channel,
             persona=self._config.persona,
-            conversation_history=channel_messages,
             target_thread_ts=message.thread_ts,
+            message_limit=self._config.response.message_limit,
         )
 
         # Perform response judgment
         judgment_result = await self._response_judgment.judge(
-            context=judgment_context,
+            context=context,
             message=message,
         )
 
@@ -177,17 +168,10 @@ class AutonomousResponseUseCase:
         if not judgment_result.should_respond:
             return
 
-        # Build context for response generation (interim: no channel_memories)
-        response_context = Context(
-            persona=self._config.persona,
-            conversation_history=channel_messages,
-            target_thread_ts=message.thread_ts,
-        )
-
-        # Generate response
+        # Generate response using the same context
         response_text = await self._response_generator.generate(
             user_message=message,
-            context=response_context,
+            context=context,
         )
 
         # Send response
@@ -216,30 +200,6 @@ class AutonomousResponseUseCase:
             response_text, message, self._bot_user_id, self._config.persona.name
         )
         await self._message_repository.save(bot_message)
-
-    async def _get_conversation_history(self, message: Message) -> list[Message]:
-        """Get conversation history.
-
-        Fetches thread history for messages in a thread,
-        or channel history for messages in the channel.
-
-        Args:
-            message: The message to get history for.
-
-        Returns:
-            Conversation history (oldest first).
-        """
-        if message.is_in_thread():
-            return await self._conversation_history_service.fetch_thread_history(
-                channel_id=message.channel.id,
-                thread_ts=message.thread_ts,  # type: ignore[arg-type]
-                limit=self._config.response.message_limit,
-            )
-        else:
-            return await self._conversation_history_service.fetch_channel_history(
-                channel_id=message.channel.id,
-                limit=self._config.response.message_limit,
-            )
 
     async def _should_skip_judgment(self, message: Message) -> bool:
         """Check if judgment should be skipped based on cache.
