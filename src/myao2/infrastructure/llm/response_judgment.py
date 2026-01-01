@@ -10,34 +10,9 @@ from myao2.domain.entities import Context, Message
 from myao2.domain.entities.judgment_result import JudgmentResult
 from myao2.infrastructure.llm.client import LLMClient
 from myao2.infrastructure.llm.exceptions import LLMError
+from myao2.infrastructure.llm.templates import create_jinja_env
 
 logger = logging.getLogger(__name__)
-
-SYSTEM_PROMPT_TEMPLATE = """あなたは会話への参加判断を行うアシスタントです。
-以下の会話を分析し、{persona_name}として応答すべきかを判断してください。
-
-現在時刻: {current_time}
-
-判断基準：
-1. 誰も反応していないメッセージがあるか
-2. 困っている/寂しそうな状況か
-3. 有用なアドバイスができそうか
-4. 会話に割り込むのが適切か
-5. メッセージからの経過時間（長時間放置されているか）
-
-以下の場合は応答しないでください：
-- 明らかな独り言
-- 活発な会話に無理に割り込む場合
-
-必ずJSON形式で回答してください。他のテキストは含めないでください。
-回答形式：
-{{"should_respond": true/false, "reason": "理由", "confidence": 0.0-1.0}}
-
-confidence について：
-- 1.0: 完全に確信（状況が明確で、今後も変わる可能性が低い）
-- 0.7-0.9: かなり確信（多少の不確実性はあるが、ほぼ判断可能）
-- 0.4-0.6: やや不確実（状況が変わる可能性がある）
-- 0.0-0.3: 非常に不確実（追加情報が必要）"""
 
 
 class LLMResponseJudgment:
@@ -54,6 +29,8 @@ class LLMResponseJudgment:
             client: LLM client for making API calls.
         """
         self._client = client
+        self._jinja_env = create_jinja_env()
+        self._template = self._jinja_env.get_template("judgment_prompt.j2")
 
     async def judge(self, context: Context) -> JudgmentResult:
         """Determine whether to respond.
@@ -175,7 +152,7 @@ class LLMResponseJudgment:
         Returns:
             System prompt string.
         """
-        return SYSTEM_PROMPT_TEMPLATE.format(
+        return self._template.render(
             persona_name=persona.name,
             current_time=current_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
         )

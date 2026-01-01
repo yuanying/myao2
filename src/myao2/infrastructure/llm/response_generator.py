@@ -3,10 +3,9 @@
 import logging
 from datetime import datetime
 
-from jinja2 import Environment, PackageLoader, select_autoescape
-
 from myao2.domain.entities import Context
 from myao2.infrastructure.llm.client import LLMClient
+from myao2.infrastructure.llm.templates import create_jinja_env
 
 logger = logging.getLogger(__name__)
 
@@ -32,23 +31,9 @@ class LiteLLMResponseGenerator:
         """
         self._client = client
         self._debug_llm_messages = debug_llm_messages
-        self._jinja_env = self._create_jinja_env()
+        self._jinja_env = create_jinja_env()
+        self._jinja_env.filters["format_timestamp"] = self._format_timestamp
         self._template = self._jinja_env.get_template("system_prompt.j2")
-
-    def _create_jinja_env(self) -> Environment:
-        """Create Jinja2 environment.
-
-        Returns:
-            Configured Jinja2 environment.
-        """
-        env = Environment(
-            loader=PackageLoader("myao2.infrastructure.llm", "templates"),
-            autoescape=select_autoescape(),
-            trim_blocks=True,
-            lstrip_blocks=True,
-        )
-        env.filters["format_timestamp"] = self._format_timestamp
-        return env
 
     @staticmethod
     def _format_timestamp(timestamp: datetime) -> str:
