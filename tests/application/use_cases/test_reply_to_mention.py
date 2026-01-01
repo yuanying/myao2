@@ -41,16 +41,24 @@ def mock_message_repository() -> Mock:
     repo.find_by_channel = AsyncMock(return_value=[])
     repo.find_by_thread = AsyncMock(return_value=[])
     repo.find_by_id = AsyncMock(return_value=None)
+    repo.find_all_in_channel = AsyncMock(return_value=[])
     return repo
 
 
 @pytest.fixture
-def mock_conversation_history_service() -> Mock:
-    """Create mock conversation history service."""
-    service = Mock()
-    service.fetch_thread_history = AsyncMock(return_value=[])
-    service.fetch_channel_history = AsyncMock(return_value=[])
-    return service
+def mock_channel_repository() -> Mock:
+    """Create mock channel repository."""
+    repo = Mock()
+    repo.find_all = AsyncMock(return_value=[])
+    return repo
+
+
+@pytest.fixture
+def mock_memory_repository() -> Mock:
+    """Create mock memory repository."""
+    repo = Mock()
+    repo.find_by_scope_and_type = AsyncMock(return_value=None)
+    return repo
 
 
 @pytest.fixture
@@ -67,7 +75,8 @@ def use_case(
     mock_messaging_service: Mock,
     mock_response_generator: Mock,
     mock_message_repository: Mock,
-    mock_conversation_history_service: Mock,
+    mock_channel_repository: Mock,
+    mock_memory_repository: Mock,
     persona: PersonaConfig,
     bot_user_id: str,
 ) -> ReplyToMentionUseCase:
@@ -76,7 +85,8 @@ def use_case(
         messaging_service=mock_messaging_service,
         response_generator=mock_response_generator,
         message_repository=mock_message_repository,
-        conversation_history_service=mock_conversation_history_service,
+        channel_repository=mock_channel_repository,
+        memory_repository=mock_memory_repository,
         persona=persona,
         bot_user_id=bot_user_id,
     )
@@ -270,67 +280,6 @@ class TestReplyToMentionUseCaseMessageSaving:
         assert saved_response.user.is_bot is True
 
 
-class TestReplyToMentionUseCaseHistoryFetching:
-    """Tests for conversation history fetching."""
-
-    async def test_fetches_thread_history_when_in_thread(
-        self,
-        use_case: ReplyToMentionUseCase,
-        mock_conversation_history_service: Mock,
-        channel: Channel,
-        user: User,
-        timestamp: datetime,
-        bot_user_id: str,
-    ) -> None:
-        """Test that thread history is fetched for messages in thread."""
-        thread_ts = "1234567890.123456"
-        message = Message(
-            id="M001",
-            channel=channel,
-            user=user,
-            text=f"<@{bot_user_id}> help",
-            timestamp=timestamp,
-            thread_ts=thread_ts,
-            mentions=[bot_user_id],
-        )
-
-        await use_case.execute(message)
-
-        mock_conversation_history_service.fetch_thread_history.assert_awaited_once_with(
-            channel_id=channel.id,
-            thread_ts=thread_ts,
-            limit=20,
-        )
-        mock_conversation_history_service.fetch_channel_history.assert_not_awaited()
-
-    async def test_fetches_channel_history_when_not_in_thread(
-        self,
-        use_case: ReplyToMentionUseCase,
-        mock_conversation_history_service: Mock,
-        channel: Channel,
-        user: User,
-        timestamp: datetime,
-        bot_user_id: str,
-    ) -> None:
-        """Test that channel history is fetched for messages in channel."""
-        message = Message(
-            id="M001",
-            channel=channel,
-            user=user,
-            text=f"<@{bot_user_id}> hello",
-            timestamp=timestamp,
-            mentions=[bot_user_id],
-        )
-
-        await use_case.execute(message)
-
-        mock_conversation_history_service.fetch_channel_history.assert_awaited_once_with(
-            channel_id=channel.id,
-            limit=20,
-        )
-        mock_conversation_history_service.fetch_thread_history.assert_not_awaited()
-
-
 class TestReplyToMentionUseCaseContextBuilding:
     """Tests for Context building."""
 
@@ -338,7 +287,7 @@ class TestReplyToMentionUseCaseContextBuilding:
         self,
         use_case: ReplyToMentionUseCase,
         mock_response_generator: Mock,
-        mock_conversation_history_service: Mock,
+        mock_message_repository: Mock,
         persona: PersonaConfig,
         channel: Channel,
         user: User,
@@ -357,7 +306,7 @@ class TestReplyToMentionUseCaseContextBuilding:
                 mentions=[],
             ),
         ]
-        mock_conversation_history_service.fetch_channel_history.return_value = history
+        mock_message_repository.find_all_in_channel.return_value = history
 
         message = Message(
             id="M001",

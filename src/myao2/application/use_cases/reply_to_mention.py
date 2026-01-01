@@ -1,14 +1,14 @@
 """Reply to mention use case."""
 
 from myao2.application.use_cases.helpers import (
-    build_channel_messages,
+    build_context_with_memory,
     create_bot_message,
 )
 from myao2.config import PersonaConfig
-from myao2.domain.entities import Channel, Context, Message
-from myao2.domain.repositories import MessageRepository
+from myao2.domain.entities import Message
+from myao2.domain.repositories import ChannelRepository, MessageRepository
+from myao2.domain.repositories.memory_repository import MemoryRepository
 from myao2.domain.services import (
-    ConversationHistoryService,
     MessagingService,
     ResponseGenerator,
 )
@@ -26,7 +26,8 @@ class ReplyToMentionUseCase:
         messaging_service: MessagingService,
         response_generator: ResponseGenerator,
         message_repository: MessageRepository,
-        conversation_history_service: ConversationHistoryService,
+        channel_repository: ChannelRepository,
+        memory_repository: MemoryRepository,
         persona: PersonaConfig,
         bot_user_id: str,
     ) -> None:
@@ -36,14 +37,16 @@ class ReplyToMentionUseCase:
             messaging_service: Service for sending messages.
             response_generator: Service for generating responses.
             message_repository: Repository for storing messages.
-            conversation_history_service: Service for fetching conversation history.
+            channel_repository: Repository for channel operations.
+            memory_repository: Repository for memory access.
             persona: Bot persona configuration.
             bot_user_id: The bot's user ID.
         """
         self._messaging_service = messaging_service
         self._response_generator = response_generator
         self._message_repository = message_repository
-        self._conversation_history_service = conversation_history_service
+        self._channel_repository = channel_repository
+        self._memory_repository = memory_repository
         self._persona = persona
         self._bot_user_id = bot_user_id
 
@@ -54,11 +57,10 @@ class ReplyToMentionUseCase:
         1. Ignore messages from the bot itself
         2. Ignore messages that don't mention the bot
         3. Save the received message
-        4. Fetch conversation history (thread or channel)
-        5. Build Context
-        6. Generate response with context
-        7. Send response
-        8. Save response message
+        4. Build Context with memory (retrieves messages from repository)
+        5. Generate response with context
+        6. Send response
+        7. Save response message
 
         Args:
             message: The received message.
@@ -74,87 +76,31 @@ class ReplyToMentionUseCase:
         # 3. Save the received message
         await self._message_repository.save(message)
 
-        # 4. Fetch conversation history
-        conversation_history = await self._get_conversation_history(message)
-
-        # 5. Build Context
-        context = self._build_context(
-            conversation_history, message.channel, message.thread_ts
+        # 4. Build Context with memory (retrieves messages from repository)
+        context = await build_context_with_memory(
+            memory_repository=self._memory_repository,
+            message_repository=self._message_repository,
+            channel_repository=self._channel_repository,
+            channel=message.channel,
+            persona=self._persona,
+            target_thread_ts=message.thread_ts,
         )
 
-        # 6. Generate response with context
+        # 5. Generate response with context
         response_text = await self._response_generator.generate(
             user_message=message,
             context=context,
         )
 
-        # 7. Send response
+        # 6. Send response
         await self._messaging_service.send_message(
             channel_id=message.channel.id,
             text=response_text,
             thread_ts=message.thread_ts,
         )
 
-        # 8. Save response message
+        # 7. Save response message
         bot_message = create_bot_message(
             response_text, message, self._bot_user_id, self._persona.name
         )
         await self._message_repository.save(bot_message)
-
-    async def _get_conversation_history(self, message: Message) -> list[Message]:
-        """Get conversation history.
-
-        Fetches thread history for messages in a thread,
-        or channel history for messages in the channel.
-
-        Args:
-            message: The received message.
-
-        Returns:
-            Conversation history (oldest first).
-        """
-        if message.is_in_thread():
-            # Fetch thread history for messages in a thread
-            return await self._conversation_history_service.fetch_thread_history(
-                channel_id=message.channel.id,
-                thread_ts=message.thread_ts,  # type: ignore[arg-type]
-                limit=20,
-            )
-        else:
-            # Fetch channel history for messages in the channel
-            return await self._conversation_history_service.fetch_channel_history(
-                channel_id=message.channel.id,
-                limit=20,
-            )
-
-    def _build_context(
-        self,
-        conversation_history: list[Message],
-        channel: Channel,
-        thread_ts: str | None,
-    ) -> Context:
-        """Build Context.
-
-        Args:
-            conversation_history: Conversation history.
-            channel: The channel.
-            thread_ts: The thread timestamp (None for top-level).
-
-        Returns:
-            Context instance.
-        """
-        # TODO(task-08): Build proper ChannelMessages with full channel context
-        # Currently only includes thread or recent channel messages,
-        # not full channel structure.
-        # Task 08 will implement proper ChannelMessages construction with:
-        # - Full channel message structure (top-level + thread separation)
-        # - workspace_long_term_memory, workspace_short_term_memory
-        # - channel_memories with long/short term memories
-        # - thread_memories for recent thread summaries
-        channel_messages = build_channel_messages(conversation_history, channel)
-
-        return Context(
-            persona=self._persona,
-            conversation_history=channel_messages,
-            target_thread_ts=thread_ts,
-        )

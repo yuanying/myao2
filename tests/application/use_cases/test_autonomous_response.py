@@ -73,6 +73,7 @@ def mock_message_repository() -> Mock:
     repo.save = AsyncMock()
     repo.find_by_channel = AsyncMock(return_value=[])
     repo.find_by_thread = AsyncMock(return_value=[])
+    repo.find_all_in_channel = AsyncMock(return_value=[])
     return repo
 
 
@@ -88,19 +89,19 @@ def mock_judgment_cache_repository() -> Mock:
 
 
 @pytest.fixture
-def mock_conversation_history_service() -> Mock:
-    """Create mock conversation history service."""
-    service = Mock()
-    service.fetch_thread_history = AsyncMock(return_value=[])
-    service.fetch_channel_history = AsyncMock(return_value=[])
-    return service
-
-
-@pytest.fixture
 def mock_channel_repository() -> Mock:
     """Create mock channel repository."""
     repo = Mock()
     repo.delete = AsyncMock(return_value=True)
+    repo.find_all = AsyncMock(return_value=[])
+    return repo
+
+
+@pytest.fixture
+def mock_memory_repository() -> Mock:
+    """Create mock memory repository."""
+    repo = Mock()
+    repo.find_by_scope_and_type = AsyncMock(return_value=None)
     return repo
 
 
@@ -136,8 +137,8 @@ def use_case(
     mock_messaging_service: Mock,
     mock_message_repository: Mock,
     mock_judgment_cache_repository: Mock,
-    mock_conversation_history_service: Mock,
     mock_channel_repository: Mock,
+    mock_memory_repository: Mock,
     mock_channel_sync_service: Mock,
     config: Config,
     bot_user_id: str,
@@ -150,11 +151,11 @@ def use_case(
         messaging_service=mock_messaging_service,
         message_repository=mock_message_repository,
         judgment_cache_repository=mock_judgment_cache_repository,
-        conversation_history_service=mock_conversation_history_service,
         channel_repository=mock_channel_repository,
-        channel_sync_service=mock_channel_sync_service,
+        memory_repository=mock_memory_repository,
         config=config,
         bot_user_id=bot_user_id,
+        channel_sync_service=mock_channel_sync_service,
     )
 
 
@@ -408,71 +409,6 @@ class TestAutonomousResponseUseCaseCheckChannel:
         )
 
 
-class TestAutonomousResponseUseCaseHistoryFetching:
-    """Tests for conversation history fetching."""
-
-    async def test_fetches_thread_history_for_thread_message(
-        self,
-        use_case: AutonomousResponseUseCase,
-        mock_channel_monitor: Mock,
-        mock_response_judgment: Mock,
-        mock_conversation_history_service: Mock,
-        channel: Channel,
-        user: User,
-        timestamp: datetime,
-    ) -> None:
-        """Test that thread history is fetched for messages in thread."""
-        thread_ts = "1234567890.123456"
-        message = Message(
-            id="M001",
-            channel=channel,
-            user=user,
-            text="Thread message",
-            timestamp=timestamp,
-            thread_ts=thread_ts,
-            mentions=[],
-        )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
-
-        await use_case.check_channel(channel)
-
-        mock_conversation_history_service.fetch_thread_history.assert_awaited_once_with(
-            channel_id=channel.id,
-            thread_ts=thread_ts,
-            limit=20,
-        )
-        mock_conversation_history_service.fetch_channel_history.assert_not_awaited()
-
-    async def test_fetches_channel_history_for_channel_message(
-        self,
-        use_case: AutonomousResponseUseCase,
-        mock_channel_monitor: Mock,
-        mock_response_judgment: Mock,
-        mock_conversation_history_service: Mock,
-        channel: Channel,
-        user: User,
-        timestamp: datetime,
-    ) -> None:
-        """Test that channel history is fetched for messages in channel."""
-        message = Message(
-            id="M001",
-            channel=channel,
-            user=user,
-            text="Channel message",
-            timestamp=timestamp,
-            mentions=[],
-        )
-        mock_channel_monitor.get_unreplied_messages.return_value = [message]
-
-        await use_case.check_channel(channel)
-
-        mock_conversation_history_service.fetch_channel_history.assert_awaited_once_with(
-            channel_id=channel.id,
-            limit=20,
-        )
-        mock_conversation_history_service.fetch_thread_history.assert_not_awaited()
-
-
 class TestAutonomousResponseUseCaseContextBuilding:
     """Tests for context building."""
 
@@ -685,7 +621,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         mock_messaging_service: Mock,
         mock_message_repository: Mock,
         mock_judgment_cache_repository: Mock,
-        mock_conversation_history_service: Mock,
+        mock_channel_repository: Mock,
+        mock_memory_repository: Mock,
         config_with_skip: Config,
         bot_user_id: str,
     ) -> AutonomousResponseUseCase:
@@ -697,7 +634,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
             messaging_service=mock_messaging_service,
             message_repository=mock_message_repository,
             judgment_cache_repository=mock_judgment_cache_repository,
-            conversation_history_service=mock_conversation_history_service,
+            channel_repository=mock_channel_repository,
+            memory_repository=mock_memory_repository,
             config=config_with_skip,
             bot_user_id=bot_user_id,
         )
@@ -711,7 +649,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         mock_messaging_service: Mock,
         mock_message_repository: Mock,
         mock_judgment_cache_repository: Mock,
-        mock_conversation_history_service: Mock,
+        mock_channel_repository: Mock,
+        mock_memory_repository: Mock,
         config_skip_disabled: Config,
         bot_user_id: str,
     ) -> AutonomousResponseUseCase:
@@ -723,7 +662,8 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
             messaging_service=mock_messaging_service,
             message_repository=mock_message_repository,
             judgment_cache_repository=mock_judgment_cache_repository,
-            conversation_history_service=mock_conversation_history_service,
+            channel_repository=mock_channel_repository,
+            memory_repository=mock_memory_repository,
             config=config_skip_disabled,
             bot_user_id=bot_user_id,
         )
