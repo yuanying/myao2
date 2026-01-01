@@ -875,31 +875,31 @@ def _build_system_prompt(
 
 ### MemorySummarizer（LLM層）
 
-- [ ] memory_prompt.j2 がシステムプロンプト方式に対応している
-- [ ] LLMMemorySummarizer がシステムプロンプトのみで呼び出している
-- [ ] THREAD スコープで ResponseGenerator 同等のコンテキストが渡される
-  - [ ] ワークスペース記憶が含まれる
-  - [ ] チャンネル記憶が含まれる
-  - [ ] 会話履歴全体が含まれる
-  - [ ] 対象スレッドが最後に配置される
-- [ ] CHANNEL 短期記憶で全メッセージとワークスペース記憶が含まれる
-- [ ] CHANNEL 長期記憶で短期記憶が入力として使用される
-- [ ] WORKSPACE 短期記憶で各チャンネルの短期記憶のみが統合される
-- [ ] WORKSPACE 長期記憶で既存のWS長期記憶と各チャンネルの長期記憶が全て「統合対象」として含まれる
-- [ ] ペルソナのシステムプロンプトが全スコープで含まれる
-- [ ] 既存の Protocol インターフェースが維持されている
-- [ ] format_timestamp フィルターが実装されている
+- [x] memory_prompt.j2 がシステムプロンプト方式に対応している
+- [x] LLMMemorySummarizer がシステムプロンプトのみで呼び出している
+- [x] THREAD スコープで ResponseGenerator 同等のコンテキストが渡される
+  - [x] ワークスペース記憶が含まれる
+  - [x] チャンネル記憶が含まれる
+  - [x] 会話履歴全体が含まれる
+  - [x] 対象スレッドが最後に配置される
+- [x] CHANNEL 短期記憶で全メッセージとワークスペース記憶が含まれる
+- [x] CHANNEL 長期記憶で短期記憶が入力として使用される
+- [x] WORKSPACE 短期記憶で各チャンネルの短期記憶のみが統合される
+- [x] WORKSPACE 長期記憶で既存のWS長期記憶と各チャンネルの長期記憶が全て「統合対象」として含まれる
+- [x] ペルソナのシステムプロンプトが全スコープで含まれる
+- [x] 既存の Protocol インターフェースが維持されている
+- [x] format_timestamp フィルターが実装されている
 
 ### Context構築の共通化（UseCase層）
 
-- [ ] `helpers.py` の `build_context_with_memory()` に `since` パラメータが追加されている
-- [ ] GenerateMemoryUseCase が共通の `build_context_with_memory()` を使用している
-  - [ ] チャンネル短期記憶生成で使用
-  - [ ] スレッド記憶生成で使用
-- [ ] ResponseGenerator用とMemorySummarizer用で同一のContext構築関数を使用している
-- [ ] 既存の ReplyToMentionUseCase、AutonomousResponseUseCase が正常に動作する
+- [x] `helpers.py` の `build_context_with_memory()` に `since` パラメータが追加されている
+- [x] GenerateMemoryUseCase が共通の `build_context_with_memory()` を使用している
+  - [x] チャンネル短期記憶生成で使用
+  - [x] スレッド記憶生成で使用
+- [x] ResponseGenerator用とMemorySummarizer用で同一のContext構築関数を使用している
+- [x] 既存の ReplyToMentionUseCase、AutonomousResponseUseCase が正常に動作する
 
 ### テスト
 
-- [ ] 全テストケースが通過する
-- [ ] GenerateMemoryUseCase のテストがContext構築の変更に対応している
+- [x] 全テストケースが通過する
+- [x] GenerateMemoryUseCase のテストがContext構築の変更に対応している
