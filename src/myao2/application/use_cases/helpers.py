@@ -1,5 +1,7 @@
 """Helper functions for use cases."""
 
+from __future__ import annotations
+
 import uuid
 from datetime import datetime, timezone
 
@@ -133,36 +135,54 @@ async def build_context_with_memory(
     memory_repository: MemoryRepository,
     message_repository: MessageRepository,
     channel_repository: ChannelRepository,
-    channel: Channel,
     persona: PersonaConfig,
+    channel: Channel | None = None,
     target_thread_ts: str | None = None,
     message_limit: int = DEFAULT_MESSAGE_LIMIT,
+    since: datetime | None = None,
 ) -> Context:
     """Build Context with memory from repository.
 
     Retrieves messages from the channel, builds ChannelMessages structure,
     and retrieves workspace, channel, and thread memories from the repository.
 
+    Note:
+        All channels are included in channel_memories, even those without
+        any memory (long_term_memory and short_term_memory will be None).
+        When channel is None, an empty ChannelMessages is created (for
+        workspace-level memory generation).
+
     Args:
         memory_repository: Repository for memory access.
         message_repository: Repository for message access.
         channel_repository: Repository for channel access.
-        channel: The target channel.
         persona: Persona configuration.
+        channel: The target channel (None for workspace-level context).
         target_thread_ts: Target thread timestamp (None for top-level).
         message_limit: Maximum number of messages to retrieve.
+        since: Message retrieval start time (optional, for GenerateMemory).
 
     Returns:
         Context instance with messages and memories populated.
     """
-    # Retrieve messages from channel
-    messages = await message_repository.find_all_in_channel(
-        channel_id=channel.id,
-        limit=message_limit,
-    )
-
-    # Build ChannelMessages structure
-    channel_messages = build_channel_messages(messages, channel)
+    # Retrieve messages from channel (skip if no channel specified)
+    if channel:
+        if since:
+            messages = await message_repository.find_by_channel_since(
+                channel_id=channel.id,
+                since=since,
+                limit=message_limit,
+            )
+        else:
+            messages = await message_repository.find_all_in_channel(
+                channel_id=channel.id,
+                limit=message_limit,
+            )
+        # Build ChannelMessages structure
+        channel_messages = build_channel_messages(messages, channel)
+    else:
+        # Empty ChannelMessages for workspace-level context
+        channel_messages = ChannelMessages(channel_id="", channel_name="")
 
     # Retrieve workspace memories
     ws_long_term = await memory_repository.find_by_scope_and_type(
@@ -186,17 +206,16 @@ async def build_context_with_memory(
         ch_short = await memory_repository.find_by_scope_and_type(
             MemoryScope.CHANNEL, ch.id, MemoryType.SHORT_TERM
         )
-        if ch_long or ch_short:
-            channel_memories[ch.id] = ChannelMemory(
-                channel_id=ch.id,
-                channel_name=ch.name,
-                long_term_memory=ch_long.content if ch_long else None,
-                short_term_memory=ch_short.content if ch_short else None,
-            )
+        channel_memories[ch.id] = ChannelMemory(
+            channel_id=ch.id,
+            channel_name=ch.name,
+            long_term_memory=ch_long.content if ch_long else None,
+            short_term_memory=ch_short.content if ch_short else None,
+        )
 
-    # Retrieve thread memory for target thread only
+    # Retrieve thread memory for target thread only (requires channel)
     thread_memories: dict[str, str] = {}
-    if target_thread_ts:
+    if channel and target_thread_ts:
         scope_id = make_thread_scope_id(channel.id, target_thread_ts)
         thread_mem = await memory_repository.find_by_scope_and_type(
             MemoryScope.THREAD, scope_id, MemoryType.SHORT_TERM
