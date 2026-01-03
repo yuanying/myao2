@@ -51,7 +51,7 @@ class LiteLLMResponseGenerator:
         Raises:
             LLMError: If response generation fails.
         """
-        system_prompt = self._build_system_prompt(context)
+        system_prompt = self.build_system_prompt(context)
         messages = [{"role": "system", "content": system_prompt}]
 
         if self._should_log():
@@ -64,7 +64,7 @@ class LiteLLMResponseGenerator:
 
         return response
 
-    def _build_system_prompt(self, context: Context) -> str:
+    def build_system_prompt(self, context: Context) -> str:
         """Build system prompt from context.
 
         Uses Jinja2 template to construct the prompt with memory integration.

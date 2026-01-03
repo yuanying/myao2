@@ -50,7 +50,7 @@ class LLMMemorySummarizer(MemorySummarizer):
         if not self._has_content_to_summarize(context, scope, memory_type):
             return existing_memory or ""
 
-        system_prompt = self._build_system_prompt(
+        system_prompt = self.build_system_prompt(
             context, scope, memory_type, existing_memory
         )
         max_tokens = self._get_max_tokens(memory_type)
@@ -110,7 +110,7 @@ class LLMMemorySummarizer(MemorySummarizer):
                     ch.long_term_memory for ch in context.channel_memories.values()
                 )
 
-    def _build_system_prompt(
+    def build_system_prompt(
         self,
         context: Context,
         scope: MemoryScope,

@@ -44,7 +44,7 @@ class LLMResponseJudgment:
             Judgment result.
         """
         try:
-            system_prompt = self._build_system_prompt(context)
+            system_prompt = self.build_system_prompt(context)
             messages = [{"role": "system", "content": system_prompt}]
             response = await self._client.complete(messages)
             logger.debug("LLM judgment response: %s", response)
@@ -62,7 +62,7 @@ class LLMResponseJudgment:
                 reason=f"LLM error: {e}",
             )
 
-    def _build_system_prompt(self, context: Context) -> str:
+    def build_system_prompt(self, context: Context) -> str:
         """Build system prompt using Jinja2 template.
 
         Args:

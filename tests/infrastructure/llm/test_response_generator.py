@@ -273,7 +273,7 @@ class TestFormatTimestamp:
 
 
 class TestBuildSystemPromptWithMemory:
-    """Tests for _build_system_prompt with memory integration."""
+    """Tests for build_system_prompt with memory integration."""
 
     @pytest.fixture
     def mock_client(self) -> MagicMock:
@@ -355,7 +355,7 @@ class TestBuildSystemPromptWithMemory:
             conversation_history=channel_messages,
         )
 
-        result = generator._build_system_prompt(context)
+        result = generator.build_system_prompt(context)
 
         # Should include persona prompt
         assert "You are a friendly bot." in result
@@ -404,7 +404,7 @@ class TestBuildSystemPromptWithMemory:
             workspace_short_term_memory="Workspace short-term memory content.",
         )
 
-        result = generator._build_system_prompt(context)
+        result = generator.build_system_prompt(context)
 
         # Should include memory section
         assert "## 記憶" in result
@@ -458,7 +458,7 @@ class TestBuildSystemPromptWithMemory:
             channel_memories=channel_memories,
         )
 
-        result = generator._build_system_prompt(context)
+        result = generator.build_system_prompt(context)
 
         # Should include channel info section
         assert "## チャンネル情報" in result
@@ -527,7 +527,7 @@ class TestBuildSystemPromptWithMemory:
             target_thread_ts="1234567890.000001",
         )
 
-        result = generator._build_system_prompt(context)
+        result = generator.build_system_prompt(context)
 
         # Target thread should NOT appear in "### スレッド:" section
         # (to avoid duplication)
@@ -570,7 +570,7 @@ class TestBuildSystemPromptWithMemory:
             target_thread_ts=None,  # Top-level reply
         )
 
-        result = generator._build_system_prompt(context)
+        result = generator.build_system_prompt(context)
 
         # For top-level reply, "### トップレベル" section should NOT exist
         assert "### トップレベル" not in result
@@ -622,7 +622,7 @@ class TestBuildSystemPromptWithMemory:
             target_thread_ts=None,
         )
 
-        result = generator._build_system_prompt(context)
+        result = generator.build_system_prompt(context)
 
         # Verify order of sections (broad to narrow)
         persona_pos = result.find("You are a friendly bot.")
