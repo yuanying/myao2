@@ -452,7 +452,7 @@ class TestBuildContextWithMemory:
         assert result.thread_memories == {}
 
     @pytest.mark.asyncio
-    async def test_channel_without_memory_not_included(
+    async def test_channel_without_memory_included_with_none_values(
         self,
         mock_memory_repository: Mock,
         mock_message_repository: Mock,
@@ -460,7 +460,7 @@ class TestBuildContextWithMemory:
         persona_config: PersonaConfig,
         channel: Channel,
     ) -> None:
-        """Test channels without memory are not included in channel_memories."""
+        """Test channels without memory are included with None values."""
         mock_channel_repository.find_all = AsyncMock(return_value=[channel])
         mock_memory_repository.find_by_scope_and_type = AsyncMock(return_value=None)
 
@@ -472,7 +472,10 @@ class TestBuildContextWithMemory:
             persona=persona_config,
         )
 
-        assert result.channel_memories == {}
+        # Channel should be included even without memory (with None values)
+        assert channel.id in result.channel_memories
+        assert result.channel_memories[channel.id].long_term_memory is None
+        assert result.channel_memories[channel.id].short_term_memory is None
 
     @pytest.mark.asyncio
     async def test_channel_with_partial_memory(

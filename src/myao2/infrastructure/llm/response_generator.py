@@ -1,11 +1,10 @@
 """LLM response generator."""
 
 import logging
-from datetime import datetime
 
 from myao2.domain.entities import Context
 from myao2.infrastructure.llm.client import LLMClient
-from myao2.infrastructure.llm.templates import create_jinja_env
+from myao2.infrastructure.llm.templates import create_jinja_env, format_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -32,20 +31,8 @@ class LiteLLMResponseGenerator:
         self._client = client
         self._debug_llm_messages = debug_llm_messages
         self._jinja_env = create_jinja_env()
-        self._jinja_env.filters["format_timestamp"] = self._format_timestamp
+        self._jinja_env.filters["format_timestamp"] = format_timestamp
         self._template = self._jinja_env.get_template("system_prompt.j2")
-
-    @staticmethod
-    def _format_timestamp(timestamp: datetime) -> str:
-        """Format datetime to readable string.
-
-        Args:
-            timestamp: datetime object.
-
-        Returns:
-            Formatted string in YYYY-MM-DD HH:MM:SS format.
-        """
-        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
     async def generate(
         self,

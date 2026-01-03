@@ -9,6 +9,7 @@ from myao2.config.models import PersonaConfig
 from myao2.domain.entities import Channel, Context, Message, User
 from myao2.domain.entities.channel_messages import ChannelMemory, ChannelMessages
 from myao2.infrastructure.llm import LiteLLMResponseGenerator, LLMClient, LLMError
+from myao2.infrastructure.llm.templates import format_timestamp
 
 
 @pytest.fixture
@@ -261,13 +262,13 @@ class TestFormatTimestamp:
     def test_format_timestamp_datetime(self) -> None:
         """Test formatting datetime object."""
         dt = datetime(2024, 1, 15, 14, 30, 45, tzinfo=timezone.utc)
-        result = LiteLLMResponseGenerator._format_timestamp(dt)
+        result = format_timestamp(dt)
         assert result == "2024-01-15 14:30:45"
 
     def test_format_timestamp_without_timezone(self) -> None:
         """Test formatting datetime without timezone."""
         dt = datetime(2024, 12, 31, 23, 59, 59)
-        result = LiteLLMResponseGenerator._format_timestamp(dt)
+        result = format_timestamp(dt)
         assert result == "2024-12-31 23:59:59"
 
 

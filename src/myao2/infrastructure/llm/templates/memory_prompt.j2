@@ -1,32 +1,172 @@
-{% if scope == "workspace" %}
-あなたはワークスペース全体の記憶を統合するアシスタントです。
+{#
+  render_messages macro: Renders a list of messages in Markdown format.
+  Output format for each message:
+    **YYYY-MM-DD HH:MM:SS** username:
+    message text
+#}
+{% macro render_messages(messages) %}
+{% for msg in messages %}
+**{{ msg.timestamp | format_timestamp }}** {{ msg.user.name }}:
+{{ msg.text }}
 
-複数チャンネルの記憶を統合し、以下の点に注意して要約してください：
-- チャンネル横断的なトピックや傾向を把握する
-- 重要なプロジェクトや議論を記録する
-- 組織全体の動向や関心事を特定する
-- 繰り返し話題になるテーマを特定する
+{% endfor %}
+{% endmacro %}
+{{ persona.system_prompt }}
 
+{% if scope == "thread" %}
+{# === THREAD SCOPE === #}
+{% if workspace_long_term_memory or workspace_short_term_memory %}
+## 記憶
+
+{% if workspace_long_term_memory %}
+### ワークスペースの歴史
+{{ workspace_long_term_memory }}
+
+{% endif %}
+{% if workspace_short_term_memory %}
+### ワークスペースの最近の出来事
+{{ workspace_short_term_memory }}
+
+{% endif %}
+{% endif %}
+{% if channel_memories %}
+## チャンネル情報
+
+あなたが参加しているチャンネルは以下です。
+
+{% for channel in channel_memories.values() %}
+- #{{ channel.channel_name }}
+{% endfor %}
+
+現在、あなたは #{{ current_channel_name }} にいます。
+
+## 各チャンネルの記憶
+
+{% for channel in channel_memories.values() %}
+{% if channel.long_term_memory or channel.short_term_memory %}
+### #{{ channel.channel_name }}
+
+{% if channel.long_term_memory %}
+#### 歴史
+{{ channel.long_term_memory }}
+
+{% endif %}
+{% if channel.short_term_memory %}
+#### 最近の出来事
+{{ channel.short_term_memory }}
+
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
+## 現在の会話
+
+現在は、#{{ current_channel_name }} チャンネルにいます。
+直近の会話は以下の通りです。
+
+{% if target_thread_ts and top_level_messages %}
+### トップレベル
+
+{{ render_messages(top_level_messages) }}
+{% endif %}
+{% for thread_ts, thread_msgs in thread_messages.items() %}
+{% if thread_ts != target_thread_ts %}
+### スレッド: {{ thread_ts }}
+
+{{ render_messages(thread_msgs) }}
+{% endif %}
+{% endfor %}
+## 要約対象スレッド: {{ target_thread_ts }}
+
+{{ render_messages(target_thread_messages) }}
+---
+要約対象の内容を要約してください。
+現在進行中の話題、未解決の事項を中心に要約してください。
 要約は箇条書きで、簡潔かつ具体的に記述してください。
-{% elif memory_type == "long_term" %}
-あなたは会話の長期的な傾向を時系列で要約するアシスタントです。
 
-以下の点に注意して要約してください：
-- 時系列順に出来事を整理する
-- 重要なトピックや決定事項を記録する
-- 参加者の傾向や関係性を把握する
-- 繰り返し話題になるテーマを特定する
-- 具体的な日時や期間を含める（可能な場合）
+{% elif scope == "channel" %}
+{# === CHANNEL SCOPE === #}
+{% if workspace_long_term_memory %}
+## ワークスペースの概要
+{{ workspace_long_term_memory }}
 
+{% endif %}
+{% if memory_type == "short_term" %}
+## 要約対象: チャンネル会話履歴
+
+以下は #{{ current_channel_name }} チャンネルの直近の会話です。
+
+{% if top_level_messages %}
+### トップレベル
+
+{{ render_messages(top_level_messages) }}
+{% endif %}
+{% for thread_ts, thread_msgs in thread_messages.items() %}
+### スレッド: {{ thread_ts }}
+
+{{ render_messages(thread_msgs) }}
+{% endfor %}
+---
+要約対象のチャンネルの会話を要約してください。
+現在進行中の話題、参加者の関心事、未解決の事項を中心に要約してください。
 要約は箇条書きで、簡潔かつ具体的に記述してください。
+
 {% else %}
-あなたは会話の直近の状況を要約するアシスタントです。
+{# CHANNEL LONG_TERM #}
+{% if existing_memory %}
+## 既存のチャンネル長期記憶
+{{ existing_memory }}
 
-以下の点に注意して要約してください：
-- 現在進行中の話題を把握する
-- 直近の質問や問題を記録する
-- 参加者の現在の関心事を特定する
-- 未解決の事項を明確にする
+{% endif %}
+## 統合対象: チャンネルの短期記憶
+{{ channel_short_term_memory }}
 
+---
+上記の短期記憶を既存の長期記憶に統合してください。
+時系列で出来事を整理し、重要なトピックや決定事項を記録してください。
+古い情報は必要に応じて要約・統合しても構いません。
 要約は箇条書きで、簡潔かつ具体的に記述してください。
+
+{% endif %}
+
+{% elif scope == "workspace" %}
+{# === WORKSPACE SCOPE === #}
+{% if memory_type == "short_term" %}
+## 統合対象: 各チャンネルの短期記憶
+
+{% for channel in channel_memories.values() %}
+{% if channel.short_term_memory %}
+### #{{ channel.channel_name }}
+{{ channel.short_term_memory }}
+
+{% endif %}
+{% endfor %}
+---
+上記の各チャンネルの短期記憶を統合し、ワークスペース全体の現在の状況を要約してください。
+チャンネル横断的なトピックや傾向を把握し、重要なプロジェクトや議論を記録してください。
+要約は箇条書きで、簡潔かつ具体的に記述してください。
+
+{% else %}
+{# WORKSPACE LONG_TERM #}
+## 統合対象
+
+{% if existing_memory %}
+### 既存のワークスペース長期記憶
+{{ existing_memory }}
+
+{% endif %}
+{% for channel in channel_memories.values() %}
+{% if channel.long_term_memory %}
+### #{{ channel.channel_name }} の長期記憶
+{{ channel.long_term_memory }}
+
+{% endif %}
+{% endfor %}
+---
+上記の全ての記憶を統合し、ワークスペース全体の長期記憶を生成してください。
+チャンネル横断的なトピックや傾向、重要なプロジェクト、組織全体の動向を記録してください。
+古い情報は必要に応じて要約・統合しても構いません。
+要約は箇条書きで、簡潔かつ具体的に記述してください。
+
+{% endif %}
 {% endif %}

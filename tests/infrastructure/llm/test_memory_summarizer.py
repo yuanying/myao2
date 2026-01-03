@@ -227,21 +227,25 @@ class TestLLMMemorySummarizerThreadScope:
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
-        user_content = messages[1]["content"]
 
+        # Should only have system message (no user message)
+        assert len(messages) == 1
+        assert messages[0]["role"] == "system"
+
+        system_content = messages[0]["content"]
         # Should contain thread messages
-        assert "スレッド内の返信1" in user_content
-        assert "スレッド内の返信2" in user_content
-        # Should use thread scope name
-        assert "スレッド" in user_content
+        assert "スレッド内の返信1" in system_content
+        assert "スレッド内の返信2" in system_content
+        # Should contain summary instruction
+        assert "要約対象スレッド" in system_content
 
-    async def test_summarize_thread_includes_channel_memory_as_auxiliary(
+    async def test_summarize_thread_includes_persona_system_prompt(
         self,
         summarizer: LLMMemorySummarizer,
         mock_client: MagicMock,
         context_with_thread_messages: Context,
     ) -> None:
-        """Test that thread scope includes channel memory as auxiliary info."""
+        """Test that thread scope includes persona system prompt."""
         await summarizer.summarize(
             context=context_with_thread_messages,
             scope=MemoryScope.THREAD,
@@ -250,11 +254,51 @@ class TestLLMMemorySummarizerThreadScope:
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
-        user_content = messages[1]["content"]
+        system_content = messages[0]["content"]
 
-        # Should include channel memory as auxiliary
-        assert "チャンネルの長期記憶" in user_content
-        assert "参考情報" in user_content
+        # Should include persona system prompt
+        assert "Test prompt" in system_content
+
+    async def test_summarize_thread_includes_workspace_memories(
+        self,
+        summarizer: LLMMemorySummarizer,
+        mock_client: MagicMock,
+        context_with_thread_messages: Context,
+    ) -> None:
+        """Test that thread scope includes workspace memories (long/short-term)."""
+        await summarizer.summarize(
+            context=context_with_thread_messages,
+            scope=MemoryScope.THREAD,
+            memory_type=MemoryType.SHORT_TERM,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_content = messages[0]["content"]
+
+        # Should include workspace memory
+        assert "ワークスペースの長期記憶" in system_content
+        assert "ワークスペースの短期記憶" in system_content
+
+    async def test_summarize_thread_includes_channel_memory(
+        self,
+        summarizer: LLMMemorySummarizer,
+        mock_client: MagicMock,
+        context_with_thread_messages: Context,
+    ) -> None:
+        """Test that thread scope includes channel memory."""
+        await summarizer.summarize(
+            context=context_with_thread_messages,
+            scope=MemoryScope.THREAD,
+            memory_type=MemoryType.SHORT_TERM,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_content = messages[0]["content"]
+
+        # Should include channel memory
+        assert "チャンネルの長期記憶" in system_content
 
     async def test_summarize_thread_no_target_returns_empty(
         self,
@@ -281,29 +325,6 @@ class TestLLMMemorySummarizerThreadScope:
         assert result == ""
         mock_client.complete.assert_not_awaited()
 
-    async def test_summarize_thread_with_existing_memory(
-        self,
-        summarizer: LLMMemorySummarizer,
-        mock_client: MagicMock,
-        context_with_thread_messages: Context,
-    ) -> None:
-        """Test thread scope with existing memory for incremental update."""
-        existing = "- 既存のスレッド記憶"
-
-        await summarizer.summarize(
-            context=context_with_thread_messages,
-            scope=MemoryScope.THREAD,
-            memory_type=MemoryType.LONG_TERM,
-            existing_memory=existing,
-        )
-
-        call_args = mock_client.complete.call_args
-        messages = call_args.args[0]
-        user_content = messages[1]["content"]
-
-        assert existing in user_content
-        assert "既存の要約" in user_content
-
 
 class TestLLMMemorySummarizerChannelScope:
     """Tests for CHANNEL scope summarization."""
@@ -326,16 +347,58 @@ class TestLLMMemorySummarizerChannelScope:
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
-        user_content = messages[1]["content"]
 
+        # Should only have system message
+        assert len(messages) == 1
+        assert messages[0]["role"] == "system"
+
+        system_content = messages[0]["content"]
         # Should contain top-level messages
-        assert "こんにちは" in user_content
-        assert "今日の天気はどうですか？" in user_content
+        assert "こんにちは" in system_content
+        assert "今日の天気はどうですか？" in system_content
         # Should contain thread messages
-        assert "スレッド内の返信1" in user_content
-        assert "スレッド内の返信2" in user_content
-        # Should use channel scope name
-        assert "チャンネル" in user_content
+        assert "スレッド内の返信1" in system_content
+        assert "スレッド内の返信2" in system_content
+
+    async def test_summarize_channel_short_term_includes_persona(
+        self,
+        summarizer: LLMMemorySummarizer,
+        mock_client: MagicMock,
+        context_with_channel_messages: Context,
+    ) -> None:
+        """Test that channel short-term includes persona system prompt."""
+        await summarizer.summarize(
+            context=context_with_channel_messages,
+            scope=MemoryScope.CHANNEL,
+            memory_type=MemoryType.SHORT_TERM,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_content = messages[0]["content"]
+
+        # Should include persona
+        assert "Test prompt" in system_content
+
+    async def test_summarize_channel_short_term_includes_workspace_memory(
+        self,
+        summarizer: LLMMemorySummarizer,
+        mock_client: MagicMock,
+        context_with_channel_messages: Context,
+    ) -> None:
+        """Test that channel short-term includes workspace memory."""
+        await summarizer.summarize(
+            context=context_with_channel_messages,
+            scope=MemoryScope.CHANNEL,
+            memory_type=MemoryType.SHORT_TERM,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_content = messages[0]["content"]
+
+        # Should include workspace memory (long-term only for channel scope)
+        assert "ワークスペースの長期記憶" in system_content
 
     async def test_summarize_channel_long_term_uses_short_term_memory(
         self,
@@ -355,14 +418,14 @@ class TestLLMMemorySummarizerChannelScope:
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
-        user_content = messages[1]["content"]
+        system_content = messages[0]["content"]
 
         # Should contain short-term memory (not messages)
-        assert "チャンネルの短期記憶" in user_content
+        assert "チャンネルの短期記憶" in system_content
         # Should contain existing long-term memory
-        assert existing in user_content
+        assert existing in system_content
         # Should NOT contain raw messages
-        assert "こんにちは" not in user_content
+        assert "こんにちは" not in system_content
 
     async def test_summarize_channel_long_term_no_short_term_returns_existing(
         self,
@@ -397,27 +460,6 @@ class TestLLMMemorySummarizerChannelScope:
 
         assert result == existing
         mock_client.complete.assert_not_awaited()
-
-    async def test_summarize_channel_includes_workspace_memory_as_auxiliary(
-        self,
-        summarizer: LLMMemorySummarizer,
-        mock_client: MagicMock,
-        context_with_channel_messages: Context,
-    ) -> None:
-        """Test that channel scope includes workspace memory as auxiliary info."""
-        await summarizer.summarize(
-            context=context_with_channel_messages,
-            scope=MemoryScope.CHANNEL,
-            memory_type=MemoryType.SHORT_TERM,
-        )
-
-        call_args = mock_client.complete.call_args
-        messages = call_args.args[0]
-        user_content = messages[1]["content"]
-
-        # Should include workspace memory as auxiliary
-        assert "ワークスペースの長期記憶" in user_content
-        assert "参考情報" in user_content
 
     async def test_summarize_channel_empty_messages_returns_existing(
         self,
@@ -467,13 +509,37 @@ class TestLLMMemorySummarizerWorkspaceScope:
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
-        user_content = messages[1]["content"]
 
+        # Should only have system message
+        assert len(messages) == 1
+        assert messages[0]["role"] == "system"
+
+        system_content = messages[0]["content"]
         # Should contain channel short-term memories
-        assert "generalチャンネルの短期記憶" in user_content
-        assert "randomチャンネルの短期記憶" in user_content
+        assert "generalチャンネルの短期記憶" in system_content
+        assert "randomチャンネルの短期記憶" in system_content
         # Should NOT contain channel long-term memories
-        assert "generalチャンネルの長期記憶" not in user_content
+        assert "generalチャンネルの長期記憶" not in system_content
+
+    async def test_summarize_workspace_short_term_includes_persona(
+        self,
+        summarizer: LLMMemorySummarizer,
+        mock_client: MagicMock,
+        context_with_channel_memories: Context,
+    ) -> None:
+        """Test that workspace short-term includes persona system prompt."""
+        await summarizer.summarize(
+            context=context_with_channel_memories,
+            scope=MemoryScope.WORKSPACE,
+            memory_type=MemoryType.SHORT_TERM,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_content = messages[0]["content"]
+
+        # Should include persona
+        assert "Test prompt" in system_content
 
     async def test_summarize_workspace_long_term_uses_channel_long_term(
         self,
@@ -493,15 +559,15 @@ class TestLLMMemorySummarizerWorkspaceScope:
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
-        user_content = messages[1]["content"]
+        system_content = messages[0]["content"]
 
         # Should contain channel long-term memories
-        assert "generalチャンネルの長期記憶" in user_content
-        assert "randomチャンネルの長期記憶" in user_content
+        assert "generalチャンネルの長期記憶" in system_content
+        assert "randomチャンネルの長期記憶" in system_content
         # Should contain existing workspace long-term memory
-        assert existing in user_content
+        assert existing in system_content
         # Should NOT contain channel short-term memories
-        assert "generalチャンネルの短期記憶" not in user_content
+        assert "generalチャンネルの短期記憶" not in system_content
 
     async def test_summarize_workspace_long_term_no_channel_long_term_returns_existing(
         self,
@@ -598,26 +664,6 @@ class TestLLMMemorySummarizerWorkspaceScope:
         assert result == existing
         mock_client.complete.assert_not_awaited()
 
-    async def test_summarize_workspace_no_auxiliary_info(
-        self,
-        summarizer: LLMMemorySummarizer,
-        mock_client: MagicMock,
-        context_with_channel_memories: Context,
-    ) -> None:
-        """Test that workspace scope has no auxiliary info (highest level)."""
-        await summarizer.summarize(
-            context=context_with_channel_memories,
-            scope=MemoryScope.WORKSPACE,
-            memory_type=MemoryType.SHORT_TERM,
-        )
-
-        call_args = mock_client.complete.call_args
-        messages = call_args.args[0]
-        user_content = messages[1]["content"]
-
-        # Workspace scope should not have auxiliary info section
-        assert "参考情報" not in user_content
-
 
 class TestLLMMemorySummarizerMemoryType:
     """Tests for memory type handling."""
@@ -654,34 +700,17 @@ class TestLLMMemorySummarizerMemoryType:
         call_kwargs = mock_client.complete.call_args.kwargs
         assert call_kwargs["max_tokens"] == 300
 
-    async def test_long_term_system_prompt(
-        self,
-        summarizer: LLMMemorySummarizer,
-        mock_client: MagicMock,
-        context_with_channel_messages: Context,
-    ) -> None:
-        """Test that long-term memory uses correct system prompt."""
-        # Channel long-term uses short-term memory
-        await summarizer.summarize(
-            context=context_with_channel_messages,
-            scope=MemoryScope.CHANNEL,
-            memory_type=MemoryType.LONG_TERM,
-        )
 
-        call_args = mock_client.complete.call_args
-        messages = call_args.args[0]
-        system_content = messages[0]["content"]
+class TestLLMMemorySummarizerLLMMessageFormat:
+    """Tests for LLM message format (system-only)."""
 
-        assert "時系列" in system_content
-        assert "長期的な傾向" in system_content
-
-    async def test_short_term_system_prompt(
+    async def test_llm_message_format_is_system_only(
         self,
         summarizer: LLMMemorySummarizer,
         mock_client: MagicMock,
         context_with_thread_messages: Context,
     ) -> None:
-        """Test that short-term memory uses correct system prompt."""
+        """Test that LLM messages contain only system role (no user)."""
         await summarizer.summarize(
             context=context_with_thread_messages,
             scope=MemoryScope.THREAD,
@@ -690,9 +719,51 @@ class TestLLMMemorySummarizerMemoryType:
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
-        system_content = messages[0]["content"]
 
-        assert "直近の状況" in system_content
+        # Should have exactly 1 message
+        assert len(messages) == 1
+        # Should only have system role
+        assert messages[0]["role"] == "system"
+        # Should not have user message
+        assert all(msg["role"] != "user" for msg in messages)
+
+    async def test_channel_scope_llm_message_format(
+        self,
+        summarizer: LLMMemorySummarizer,
+        mock_client: MagicMock,
+        context_with_channel_messages: Context,
+    ) -> None:
+        """Test channel scope uses system-only format."""
+        await summarizer.summarize(
+            context=context_with_channel_messages,
+            scope=MemoryScope.CHANNEL,
+            memory_type=MemoryType.SHORT_TERM,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+
+        assert len(messages) == 1
+        assert messages[0]["role"] == "system"
+
+    async def test_workspace_scope_llm_message_format(
+        self,
+        summarizer: LLMMemorySummarizer,
+        mock_client: MagicMock,
+        context_with_channel_memories: Context,
+    ) -> None:
+        """Test workspace scope uses system-only format."""
+        await summarizer.summarize(
+            context=context_with_channel_memories,
+            scope=MemoryScope.WORKSPACE,
+            memory_type=MemoryType.SHORT_TERM,
+        )
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+
+        assert len(messages) == 1
+        assert messages[0]["role"] == "system"
 
 
 class TestLLMMemorySummarizerErrorHandling:
@@ -715,94 +786,161 @@ class TestLLMMemorySummarizerErrorHandling:
             )
 
 
-class TestLLMMemorySummarizerFormatMessages:
-    """Tests for _format_messages method."""
-
-    def test_format_messages_normal(
-        self,
-        summarizer: LLMMemorySummarizer,
-        sample_top_level_messages: list[Message],
-    ) -> None:
-        """Test message formatting with multiple messages."""
-        result = summarizer._format_messages(sample_top_level_messages)
-
-        assert "[2024-01-01 12:00] testuser: こんにちは" in result
-        assert "[2024-01-01 12:05] testuser: 今日の天気はどうですか？" in result
-
-    def test_format_messages_empty(
-        self,
-        summarizer: LLMMemorySummarizer,
-    ) -> None:
-        """Test message formatting with empty list."""
-        result = summarizer._format_messages([])
-
-        assert result == ""
-
-
 class TestLLMMemorySummarizerTemplateRendering:
     """Tests for Jinja2 template rendering."""
 
-    def test_template_renders_workspace_prompt(
+    def test_template_renders_thread_prompt(
         self,
         summarizer: LLMMemorySummarizer,
     ) -> None:
-        """Test that template renders workspace prompt correctly."""
-        rendered = summarizer._template.render(
-            scope="workspace",
-            memory_type="long_term",
+        """Test that template renders thread prompt correctly."""
+        channel = ChannelMemory(
+            channel_id="C123",
+            channel_name="general",
+            long_term_memory="チャンネルの歴史",
+            short_term_memory="チャンネルの最近の出来事",
         )
-        assert "ワークスペース全体の記憶を統合" in rendered
-        assert "チャンネル横断的" in rendered
+        context = Context(
+            persona=PersonaConfig(name="TestBot", system_prompt="Test persona prompt"),
+            conversation_history=ChannelMessages(
+                channel_id="C123",
+                channel_name="general",
+                top_level_messages=[],
+                thread_messages={},
+            ),
+            workspace_long_term_memory="WS長期記憶",
+            channel_memories={"C123": channel},
+            target_thread_ts="1234567890.000001",
+        )
 
-    def test_template_renders_long_term_prompt(
-        self,
-        summarizer: LLMMemorySummarizer,
-    ) -> None:
-        """Test that template renders long-term prompt correctly."""
-        rendered = summarizer._template.render(
-            scope="channel",
-            memory_type="long_term",
+        rendered = summarizer._build_system_prompt(
+            context=context,
+            scope=MemoryScope.THREAD,
+            memory_type=MemoryType.SHORT_TERM,
+            existing_memory=None,
         )
-        assert "長期的な傾向を時系列で要約" in rendered
-        assert "時系列順に出来事を整理" in rendered
 
-    def test_template_renders_short_term_prompt(
-        self,
-        summarizer: LLMMemorySummarizer,
-    ) -> None:
-        """Test that template renders short-term prompt correctly."""
-        rendered = summarizer._template.render(
-            scope="channel",
-            memory_type="short_term",
-        )
-        assert "直近の状況を要約" in rendered
-        assert "現在進行中の話題" in rendered
+        assert "Test persona prompt" in rendered
+        assert "WS長期記憶" in rendered
+        assert "要約対象スレッド" in rendered
 
-    def test_workspace_scope_overrides_memory_type(
+    def test_template_renders_channel_short_term_prompt(
         self,
         summarizer: LLMMemorySummarizer,
     ) -> None:
-        """Test that workspace scope uses workspace prompt regardless of memory_type."""
-        long_term_rendered = summarizer._template.render(
-            scope="workspace",
-            memory_type="long_term",
+        """Test that template renders channel short-term prompt correctly."""
+        context = Context(
+            persona=PersonaConfig(name="TestBot", system_prompt="Test persona prompt"),
+            conversation_history=ChannelMessages(
+                channel_id="C123",
+                channel_name="general",
+                top_level_messages=[],
+                thread_messages={},
+            ),
+            workspace_long_term_memory="WS長期記憶",
         )
-        short_term_rendered = summarizer._template.render(
-            scope="workspace",
-            memory_type="short_term",
-        )
-        # Both should use workspace prompt
-        assert "ワークスペース全体の記憶を統合" in long_term_rendered
-        assert "ワークスペース全体の記憶を統合" in short_term_rendered
 
-    def test_thread_scope_uses_memory_type(
+        rendered = summarizer._build_system_prompt(
+            context=context,
+            scope=MemoryScope.CHANNEL,
+            memory_type=MemoryType.SHORT_TERM,
+            existing_memory=None,
+        )
+
+        assert "Test persona prompt" in rendered
+        assert "WS長期記憶" in rendered
+        assert "チャンネル会話履歴" in rendered
+
+    def test_template_renders_channel_long_term_prompt(
         self,
         summarizer: LLMMemorySummarizer,
     ) -> None:
-        """Test that thread scope respects memory_type."""
-        short_term_rendered = summarizer._template.render(
-            scope="thread",
-            memory_type="short_term",
+        """Test that template renders channel long-term prompt correctly."""
+        channel = ChannelMemory(
+            channel_id="C123",
+            channel_name="general",
+            short_term_memory="チャンネル短期記憶",
         )
-        # Thread with short-term should use short-term prompt
-        assert "直近の状況を要約" in short_term_rendered
+        context = Context(
+            persona=PersonaConfig(name="TestBot", system_prompt="Test persona prompt"),
+            conversation_history=ChannelMessages(
+                channel_id="C123",
+                channel_name="general",
+            ),
+            channel_memories={"C123": channel},
+        )
+
+        rendered = summarizer._build_system_prompt(
+            context=context,
+            scope=MemoryScope.CHANNEL,
+            memory_type=MemoryType.LONG_TERM,
+            existing_memory="既存の長期記憶",
+        )
+
+        assert "Test persona prompt" in rendered
+        assert "既存の長期記憶" in rendered
+        assert "チャンネル短期記憶" in rendered
+        assert "統合対象" in rendered
+
+    def test_template_renders_workspace_short_term_prompt(
+        self,
+        summarizer: LLMMemorySummarizer,
+    ) -> None:
+        """Test that template renders workspace short-term prompt correctly."""
+        context = Context(
+            persona=PersonaConfig(name="TestBot", system_prompt="Test persona prompt"),
+            conversation_history=ChannelMessages(
+                channel_id="",
+                channel_name="",
+            ),
+            channel_memories={
+                "C123": ChannelMemory(
+                    channel_id="C123",
+                    channel_name="general",
+                    short_term_memory="general短期記憶",
+                )
+            },
+        )
+
+        rendered = summarizer._build_system_prompt(
+            context=context,
+            scope=MemoryScope.WORKSPACE,
+            memory_type=MemoryType.SHORT_TERM,
+            existing_memory=None,
+        )
+
+        assert "Test persona prompt" in rendered
+        assert "general短期記憶" in rendered
+        assert "ワークスペース全体" in rendered
+
+    def test_template_renders_workspace_long_term_prompt(
+        self,
+        summarizer: LLMMemorySummarizer,
+    ) -> None:
+        """Test that template renders workspace long-term prompt correctly."""
+        context = Context(
+            persona=PersonaConfig(name="TestBot", system_prompt="Test persona prompt"),
+            conversation_history=ChannelMessages(
+                channel_id="",
+                channel_name="",
+            ),
+            channel_memories={
+                "C123": ChannelMemory(
+                    channel_id="C123",
+                    channel_name="general",
+                    long_term_memory="general長期記憶",
+                )
+            },
+        )
+
+        rendered = summarizer._build_system_prompt(
+            context=context,
+            scope=MemoryScope.WORKSPACE,
+            memory_type=MemoryType.LONG_TERM,
+            existing_memory="既存のWS長期記憶",
+        )
+
+        assert "Test persona prompt" in rendered
+        assert "既存のWS長期記憶" in rendered
+        assert "general長期記憶" in rendered
+        assert "統合対象" in rendered
