@@ -5,12 +5,11 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from myao2.config.models import PersonaConfig
-from myao2.domain.entities import Context, Message
+from myao2.domain.entities import Context
 from myao2.domain.entities.judgment_result import JudgmentResult
 from myao2.infrastructure.llm.client import LLMClient
 from myao2.infrastructure.llm.exceptions import LLMError
-from myao2.infrastructure.llm.templates import create_jinja_env
+from myao2.infrastructure.llm.templates import create_jinja_env, format_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +29,7 @@ class LLMResponseJudgment:
         """
         self._client = client
         self._jinja_env = create_jinja_env()
+        self._jinja_env.filters["format_timestamp"] = format_timestamp
         self._template = self._jinja_env.get_template("judgment_prompt.j2")
 
     async def judge(self, context: Context) -> JudgmentResult:
@@ -43,20 +43,9 @@ class LLMResponseJudgment:
         Returns:
             Judgment result.
         """
-        current_time = datetime.now(timezone.utc)
-
-        # Get target message from context
-        target_message = self._get_target_message(context)
-        if target_message is None:
-            logger.warning("No target message found in context")
-            return JudgmentResult(
-                should_respond=False,
-                reason="No target message found",
-                confidence=0.0,
-            )
-
         try:
-            messages = self._build_messages(context, target_message, current_time)
+            system_prompt = self._build_system_prompt(context)
+            messages = [{"role": "system", "content": system_prompt}]
             response = await self._client.complete(messages)
             logger.debug("LLM judgment response: %s", response)
             result = self._parse_response(response)
@@ -73,107 +62,39 @@ class LLMResponseJudgment:
                 reason=f"LLM error: {e}",
             )
 
-    def _get_target_message(self, context: Context) -> Message | None:
-        """Get the target message from context.
-
-        The target message is the latest message in the target thread/top-level.
+    def _build_system_prompt(self, context: Context) -> str:
+        """Build system prompt using Jinja2 template.
 
         Args:
             context: Conversation context.
 
         Returns:
-            Target message or None if not found.
+            Built system prompt string.
         """
-        target_thread_ts = context.target_thread_ts
+        channel_messages = context.conversation_history
+        current_time = datetime.now(timezone.utc)
 
-        if target_thread_ts is None:
-            # Top-level: latest message from top_level_messages
-            messages = context.conversation_history.top_level_messages
-        else:
-            # Thread: latest message from the specified thread
-            messages = context.conversation_history.get_thread(target_thread_ts)
+        # Get target thread messages
+        target_thread_messages = []
+        if context.target_thread_ts:
+            target_thread_messages = channel_messages.get_thread(
+                context.target_thread_ts
+            )
 
-        if messages:
-            return max(messages, key=lambda m: m.timestamp)
-        return None
+        template_context = {
+            "persona": context.persona,
+            "current_time": current_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "workspace_long_term_memory": context.workspace_long_term_memory,
+            "workspace_short_term_memory": context.workspace_short_term_memory,
+            "channel_memories": context.channel_memories,
+            "current_channel_name": channel_messages.channel_name,
+            "top_level_messages": channel_messages.top_level_messages,
+            "thread_messages": channel_messages.thread_messages,
+            "target_thread_ts": context.target_thread_ts,
+            "target_thread_messages": target_thread_messages,
+        }
 
-    def _build_messages(
-        self,
-        context: Context,
-        message: Message,
-        current_time: datetime,
-    ) -> list[dict[str, str]]:
-        """Build messages for LLM.
-
-        Args:
-            context: Conversation context.
-            message: Target message to judge.
-            current_time: Current time for the prompt.
-
-        Returns:
-            OpenAI-format message list.
-        """
-        system_prompt = self._build_system_prompt(context.persona, current_time)
-        # Interim: use get_all_messages() for compatibility
-        all_messages = context.conversation_history.get_all_messages()
-        conversation = self._format_conversation(all_messages)
-        target_msg = self._format_message(message)
-
-        user_content = f"会話履歴:\n{conversation}\n\n判定対象メッセージ:\n{target_msg}"
-
-        return [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ]
-
-    def _format_message(self, message: Message) -> str:
-        """Format a single message with timestamp.
-
-        Args:
-            message: Message to format.
-
-        Returns:
-            Formatted message string.
-        """
-        timestamp = message.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-        return f"[{timestamp}] {message.user.name}: {message.text}"
-
-    def _build_system_prompt(
-        self,
-        persona: PersonaConfig,
-        current_time: datetime,
-    ) -> str:
-        """Build system prompt with current time.
-
-        Args:
-            persona: Persona configuration.
-            current_time: Current time.
-
-        Returns:
-            System prompt string.
-        """
-        return self._template.render(
-            persona_name=persona.name,
-            current_time=current_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
-        )
-
-    def _format_conversation(self, messages: list[Message]) -> str:
-        """Format conversation history with timestamps.
-
-        Args:
-            messages: List of messages.
-
-        Returns:
-            Formatted conversation string.
-        """
-        if not messages:
-            return "(会話履歴なし)"
-
-        lines = []
-        for msg in messages:
-            timestamp = msg.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-            lines.append(f"[{timestamp}] {msg.user.name}: {msg.text}")
-        return "\n".join(lines)
+        return self._template.render(**template_context)
 
     def _parse_response(self, response: str) -> JudgmentResult:
         """Parse LLM response to JudgmentResult.

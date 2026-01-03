@@ -7,7 +7,7 @@ import pytest
 
 from myao2.config.models import PersonaConfig
 from myao2.domain.entities import Channel, Context, Message, User
-from myao2.domain.entities.channel_messages import ChannelMessages
+from myao2.domain.entities.channel_messages import ChannelMemory, ChannelMessages
 from myao2.infrastructure.llm import LLMClient, LLMError
 from myao2.infrastructure.llm.response_judgment import LLMResponseJudgment
 
@@ -242,6 +242,22 @@ class TestLLMResponseJudgmentErrorHandling:
 class TestLLMResponseJudgmentPrompt:
     """Prompt construction tests for LLMResponseJudgment."""
 
+    async def test_prompt_has_only_system_message(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        sample_context: Context,
+    ) -> None:
+        """Test that LLM is called with only system message (no user message)."""
+        await judgment.judge(sample_context)
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+
+        # Should have exactly one message with role "system"
+        assert len(messages) == 1
+        assert messages[0]["role"] == "system"
+
     async def test_prompt_contains_current_time(
         self,
         judgment: LLMResponseJudgment,
@@ -280,28 +296,39 @@ class TestLLMResponseJudgmentPrompt:
 
         assert "myao" in system_prompt
 
-    async def test_prompt_contains_target_message(
+    async def test_prompt_contains_persona_system_prompt(
         self,
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
         sample_context: Context,
     ) -> None:
-        """Test that prompt contains target message section."""
+        """Test that prompt contains persona's system prompt."""
         await judgment.judge(sample_context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
+        system_prompt = messages[0]["content"]
 
-        user_message = next(
-            (m for m in messages if m["role"] == "user"),
-            None,
-        )
+        # Persona's system_prompt should be at the beginning
+        assert "You are a friendly bot." in system_prompt
 
-        assert user_message is not None
-        content = user_message["content"]
-        # Should contain the target message section
-        assert "判定対象メッセージ" in content
-        assert "Can someone help me with this issue?" in content
+    async def test_prompt_contains_target_message_in_system_prompt(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        sample_context: Context,
+    ) -> None:
+        """Test that system prompt contains target message."""
+        await judgment.judge(sample_context)
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_prompt = messages[0]["content"]
+
+        # Should contain target message in system prompt
+        assert "Can someone help me with this issue?" in system_prompt
+        # Should contain judgment target section
+        assert "判定対象" in system_prompt
 
     async def test_prompt_contains_message_timestamps(
         self,
@@ -309,21 +336,15 @@ class TestLLMResponseJudgmentPrompt:
         mock_client: MagicMock,
         sample_context: Context,
     ) -> None:
-        """Test that target message includes timestamp."""
+        """Test that system prompt includes message timestamps."""
         await judgment.judge(sample_context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
+        system_prompt = messages[0]["content"]
 
-        user_message = next(
-            (m for m in messages if m["role"] == "user"),
-            None,
-        )
-
-        assert user_message is not None
-        content = user_message["content"]
         # Should contain timestamp from the target message
-        assert "2024-01-01" in content or "12:00" in content
+        assert "2024-01-01" in system_prompt or "12:00" in system_prompt
 
     async def test_prompt_contains_user_names(
         self,
@@ -331,19 +352,100 @@ class TestLLMResponseJudgmentPrompt:
         mock_client: MagicMock,
         sample_context: Context,
     ) -> None:
-        """Test that target message includes user name."""
+        """Test that system prompt includes user names."""
         await judgment.judge(sample_context)
 
         call_args = mock_client.complete.call_args
         messages = call_args.args[0]
+        system_prompt = messages[0]["content"]
 
-        user_message = next(
-            (m for m in messages if m["role"] == "user"),
-            None,
+        assert "testuser" in system_prompt
+
+    async def test_prompt_contains_channel_name(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        sample_context: Context,
+    ) -> None:
+        """Test that system prompt includes channel name."""
+        await judgment.judge(sample_context)
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_prompt = messages[0]["content"]
+
+        assert "#general" in system_prompt
+
+
+class TestLLMResponseJudgmentMemory:
+    """Tests for memory inclusion in prompt."""
+
+    async def test_prompt_contains_workspace_memory(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        persona_config: PersonaConfig,
+        target_message: Message,
+    ) -> None:
+        """Test that prompt contains workspace memory."""
+        channel_messages = ChannelMessages(
+            channel_id="C123",
+            channel_name="general",
+            top_level_messages=[target_message],
+        )
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            target_thread_ts=None,
+            workspace_long_term_memory="Project A started in 2024",
+            workspace_short_term_memory="Current sprint review",
         )
 
-        assert user_message is not None
-        assert "testuser" in user_message["content"]
+        await judgment.judge(context)
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_prompt = messages[0]["content"]
+
+        assert "Project A started in 2024" in system_prompt
+        assert "Current sprint review" in system_prompt
+
+    async def test_prompt_contains_channel_memories(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        persona_config: PersonaConfig,
+        target_message: Message,
+    ) -> None:
+        """Test that prompt contains channel memories."""
+        channel_messages = ChannelMessages(
+            channel_id="C123",
+            channel_name="general",
+            top_level_messages=[target_message],
+        )
+        channel_memories = {
+            "C123": ChannelMemory(
+                channel_id="C123",
+                channel_name="general",
+                long_term_memory="Team coordination channel",
+                short_term_memory="Weekly standup scheduled",
+            ),
+        }
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            target_thread_ts=None,
+            channel_memories=channel_memories,
+        )
+
+        await judgment.judge(context)
+
+        call_args = mock_client.complete.call_args
+        messages = call_args.args[0]
+        system_prompt = messages[0]["content"]
+
+        assert "Team coordination channel" in system_prompt
+        assert "Weekly standup scheduled" in system_prompt
 
 
 class TestLLMResponseJudgmentConfidence:
@@ -431,7 +533,7 @@ class TestLLMResponseJudgmentConfidence:
 class TestLLMResponseJudgmentMultipleMessages:
     """Tests with multiple messages in conversation."""
 
-    async def test_multiple_messages_with_timestamps(
+    async def test_multiple_messages_all_shown_in_system_prompt(
         self,
         judgment: LLMResponseJudgment,
         mock_client: MagicMock,
@@ -439,10 +541,10 @@ class TestLLMResponseJudgmentMultipleMessages:
         sample_user: User,
         sample_channel: Channel,
     ) -> None:
-        """Test formatting of multiple messages with timestamps."""
+        """Test that all messages are shown in system prompt."""
         user2 = User(id="U456", name="another_user", is_bot=False)
 
-        # Create messages with the target (latest) being the one to judge
+        # Create messages - all should be shown (not just the latest)
         history_messages = [
             Message(
                 id="1",
@@ -488,54 +590,16 @@ class TestLLMResponseJudgmentMultipleMessages:
 
         call_args = mock_client.complete.call_args
         llm_messages = call_args.args[0]
+        system_prompt = llm_messages[0]["content"]
 
-        user_message = next(
-            (m for m in llm_messages if m["role"] == "user"),
-            None,
-        )
+        # All user names should be present
+        assert "testuser" in system_prompt
+        assert "another_user" in system_prompt
 
-        assert user_message is not None
-        content = user_message["content"]
-
-        # All user names should be present in history
-        assert "testuser" in content
-        assert "another_user" in content
-
-        # History messages should be present
-        assert "Hello everyone" in content
-        assert "Hi there!" in content
-
-        # Target message (latest) should be in separate section
-        assert "判定対象メッセージ" in content
-        assert "Can anyone help me?" in content
-
-
-class TestLLMResponseJudgmentNoTargetMessage:
-    """Tests when no target message is found."""
-
-    async def test_no_target_message_returns_false(
-        self,
-        judgment: LLMResponseJudgment,
-        mock_client: MagicMock,
-        persona_config: PersonaConfig,
-    ) -> None:
-        """Test that empty context returns should_respond=False."""
-        channel_messages = ChannelMessages(
-            channel_id="C123",
-            channel_name="general",
-            top_level_messages=[],
-        )
-        context = Context(
-            persona=persona_config,
-            conversation_history=channel_messages,
-            target_thread_ts=None,
-        )
-
-        result = await judgment.judge(context)
-
-        assert result.should_respond is False
-        # LLM should not be called
-        mock_client.complete.assert_not_awaited()
+        # All messages should be present (not just the latest)
+        assert "Hello everyone" in system_prompt
+        assert "Hi there!" in system_prompt
+        assert "Can anyone help me?" in system_prompt
 
 
 class TestLLMResponseJudgmentTemplateRendering:
@@ -544,33 +608,72 @@ class TestLLMResponseJudgmentTemplateRendering:
     def test_template_renders_persona_name(
         self,
         judgment: LLMResponseJudgment,
+        persona_config: PersonaConfig,
     ) -> None:
         """Test that template renders persona name correctly."""
-        rendered = judgment._template.render(
-            persona_name="TestBot",
-            current_time="2024-01-01 12:00:00 UTC",
+        channel_messages = ChannelMessages(
+            channel_id="C123",
+            channel_name="general",
         )
-        assert "TestBot" in rendered
+        rendered = judgment._template.render(
+            persona=persona_config,
+            current_time="2024-01-01 12:00:00 UTC",
+            current_channel_name="general",
+            top_level_messages=channel_messages.top_level_messages,
+            thread_messages=channel_messages.thread_messages,
+            target_thread_ts=None,
+            target_thread_messages=[],
+            workspace_long_term_memory=None,
+            workspace_short_term_memory=None,
+            channel_memories=None,
+        )
+        assert "myao" in rendered
 
     def test_template_renders_current_time(
         self,
         judgment: LLMResponseJudgment,
+        persona_config: PersonaConfig,
     ) -> None:
         """Test that template renders current time correctly."""
+        channel_messages = ChannelMessages(
+            channel_id="C123",
+            channel_name="general",
+        )
         rendered = judgment._template.render(
-            persona_name="myao",
+            persona=persona_config,
             current_time="2024-06-15 14:30:00 UTC",
+            current_channel_name="general",
+            top_level_messages=channel_messages.top_level_messages,
+            thread_messages=channel_messages.thread_messages,
+            target_thread_ts=None,
+            target_thread_messages=[],
+            workspace_long_term_memory=None,
+            workspace_short_term_memory=None,
+            channel_memories=None,
         )
         assert "2024-06-15 14:30:00 UTC" in rendered
 
     def test_template_contains_judgment_criteria(
         self,
         judgment: LLMResponseJudgment,
+        persona_config: PersonaConfig,
     ) -> None:
         """Test that template contains all judgment criteria."""
+        channel_messages = ChannelMessages(
+            channel_id="C123",
+            channel_name="general",
+        )
         rendered = judgment._template.render(
-            persona_name="myao",
+            persona=persona_config,
             current_time="2024-01-01 12:00:00 UTC",
+            current_channel_name="general",
+            top_level_messages=channel_messages.top_level_messages,
+            thread_messages=channel_messages.thread_messages,
+            target_thread_ts=None,
+            target_thread_messages=[],
+            workspace_long_term_memory=None,
+            workspace_short_term_memory=None,
+            channel_memories=None,
         )
         assert "判断基準" in rendered
         assert "誰も反応していないメッセージがあるか" in rendered
@@ -580,11 +683,24 @@ class TestLLMResponseJudgmentTemplateRendering:
     def test_template_contains_json_format_instruction(
         self,
         judgment: LLMResponseJudgment,
+        persona_config: PersonaConfig,
     ) -> None:
         """Test that template contains JSON format instructions."""
+        channel_messages = ChannelMessages(
+            channel_id="C123",
+            channel_name="general",
+        )
         rendered = judgment._template.render(
-            persona_name="myao",
+            persona=persona_config,
             current_time="2024-01-01 12:00:00 UTC",
+            current_channel_name="general",
+            top_level_messages=channel_messages.top_level_messages,
+            thread_messages=channel_messages.thread_messages,
+            target_thread_ts=None,
+            target_thread_messages=[],
+            workspace_long_term_memory=None,
+            workspace_short_term_memory=None,
+            channel_memories=None,
         )
         assert "should_respond" in rendered
         assert "reason" in rendered
@@ -642,15 +758,64 @@ class TestLLMResponseJudgmentThreadTarget:
 
         call_args = mock_client.complete.call_args
         llm_messages = call_args.args[0]
+        system_prompt = llm_messages[0]["content"]
 
-        user_message = next(
-            (m for m in llm_messages if m["role"] == "user"),
-            None,
+        # All thread messages should be shown (not just the latest)
+        assert "Parent message" in system_prompt
+        assert "Thread reply needing help" in system_prompt
+        # Should indicate thread target
+        assert "判定対象スレッド" in system_prompt
+        assert thread_ts in system_prompt
+
+    async def test_judge_with_top_level_target(
+        self,
+        judgment: LLMResponseJudgment,
+        mock_client: MagicMock,
+        persona_config: PersonaConfig,
+        sample_user: User,
+        sample_channel: Channel,
+    ) -> None:
+        """Test judgment with top-level target (no thread_ts)."""
+        top_level_messages = [
+            Message(
+                id="1",
+                channel=sample_channel,
+                user=sample_user,
+                text="First message",
+                timestamp=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+                thread_ts=None,
+                mentions=[],
+            ),
+            Message(
+                id="2",
+                channel=sample_channel,
+                user=sample_user,
+                text="Second message",
+                timestamp=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+                thread_ts=None,
+                mentions=[],
+            ),
+        ]
+
+        channel_messages = ChannelMessages(
+            channel_id=sample_channel.id,
+            channel_name=sample_channel.name,
+            top_level_messages=top_level_messages,
+        )
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            target_thread_ts=None,
         )
 
-        assert user_message is not None
-        content = user_message["content"]
+        await judgment.judge(context)
 
-        # Target message should be the latest in thread
-        assert "判定対象メッセージ" in content
-        assert "Thread reply needing help" in content
+        call_args = mock_client.complete.call_args
+        llm_messages = call_args.args[0]
+        system_prompt = llm_messages[0]["content"]
+
+        # All top-level messages should be shown
+        assert "First message" in system_prompt
+        assert "Second message" in system_prompt
+        # Should indicate top-level target
+        assert "判定対象: トップレベル会話" in system_prompt
