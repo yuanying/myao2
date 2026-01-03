@@ -515,25 +515,25 @@ def _build_system_prompt(self, context: Context) -> str:
 
 ### ResponseJudgment（LLM層）
 
-- [ ] judgment_prompt.j2 がシステムプロンプト方式に対応している
-- [ ] LLMResponseJudgment がシステムプロンプトのみで呼び出している
-- [ ] 判定対象がスレッド全体になっている（最新メッセージのみではない）
-- [ ] ワークスペース記憶が含まれる
-- [ ] チャンネル記憶が含まれる
-- [ ] 会話履歴全体が含まれる
-- [ ] 判定対象スレッド/トップレベルが最後に配置される
-- [ ] ペルソナのシステムプロンプトが含まれる
-- [ ] 判定指示（JSON形式、判断基準）が含まれる
-- [ ] 既存の Protocol インターフェースが維持されている
-- [ ] format_timestamp フィルターが実装されている
+- [x] judgment_prompt.j2 がシステムプロンプト方式に対応している
+- [x] LLMResponseJudgment がシステムプロンプトのみで呼び出している
+- [x] 判定対象がスレッド全体になっている（最新メッセージのみではない）
+- [x] ワークスペース記憶が含まれる
+- [x] チャンネル記憶が含まれる
+- [x] 会話履歴全体が含まれる
+- [x] 判定対象スレッド/トップレベルが最後に配置される
+- [x] ペルソナのシステムプロンプトが含まれる
+- [x] 判定指示（JSON形式、判断基準）が含まれる
+- [x] 既存の Protocol インターフェースが維持されている
+- [x] format_timestamp フィルターが実装されている
 
 ### Context構築の共通化（UseCase層）
 
-- [ ] AutonomousResponseUseCase が `build_context_with_memory()` を使用している
-- [ ] ResponseJudgment に渡される Context が完全な記憶情報を含んでいる
-- [ ] ResponseGenerator、MemorySummarizer、ResponseJudgment で同一のContext構築関数を使用
+- [x] AutonomousResponseUseCase が `build_context_with_memory()` を使用している
+- [x] ResponseJudgment に渡される Context が完全な記憶情報を含んでいる
+- [x] ResponseGenerator、MemorySummarizer、ResponseJudgment で同一のContext構築関数を使用
 
 ### テスト
 
-- [ ] 全テストケースが通過する
-- [ ] 既存の判定キャッシュ機構が正常に動作する
+- [x] 全テストケースが通過する
+- [x] 既存の判定キャッシュ機構が正常に動作する
