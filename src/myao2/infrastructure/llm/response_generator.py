@@ -1,12 +1,8 @@
 """LLM response generator."""
 
-import logging
-
 from myao2.domain.entities import Context
 from myao2.infrastructure.llm.client import LLMClient
 from myao2.infrastructure.llm.templates import create_jinja_env, format_timestamp
-
-logger = logging.getLogger(__name__)
 
 
 class LiteLLMResponseGenerator:
@@ -16,20 +12,13 @@ class LiteLLMResponseGenerator:
     to generate responses with conversation context.
     """
 
-    def __init__(
-        self,
-        client: LLMClient,
-        *,
-        debug_llm_messages: bool = False,
-    ) -> None:
+    def __init__(self, client: LLMClient) -> None:
         """Initialize the generator.
 
         Args:
             client: LLMClient instance.
-            debug_llm_messages: If True, log LLM messages at INFO level.
         """
         self._client = client
-        self._debug_llm_messages = debug_llm_messages
         self._jinja_env = create_jinja_env()
         self._jinja_env.filters["format_timestamp"] = format_timestamp
         self._template = self._jinja_env.get_template("system_prompt.j2")
@@ -54,15 +43,7 @@ class LiteLLMResponseGenerator:
         system_prompt = self.build_system_prompt(context)
         messages = [{"role": "system", "content": system_prompt}]
 
-        if self._should_log():
-            self._log_messages(messages)
-
-        response = await self._client.complete(messages)
-
-        if self._should_log():
-            self._log_response(response)
-
-        return response
+        return await self._client.complete(messages, caller="response_generator")
 
     def build_system_prompt(self, context: Context) -> str:
         """Build system prompt from context.
@@ -99,25 +80,3 @@ class LiteLLMResponseGenerator:
         }
 
         return self._template.render(**template_context)
-
-    def _should_log(self) -> bool:
-        """Check if logging should occur."""
-        return self._debug_llm_messages or logger.isEnabledFor(logging.DEBUG)
-
-    def _log_messages(self, messages: list[dict[str, str]]) -> None:
-        """Log LLM request messages."""
-        log_func = logger.info if self._debug_llm_messages else logger.debug
-        log_func("=== LLM Request Messages ===")
-        for i, msg in enumerate(messages):
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            log_func("[%d] role=%s", i, role)
-            log_func("    content: %s", content)
-        log_func("=== End of Messages ===")
-
-    def _log_response(self, response: str) -> None:
-        """Log LLM response."""
-        log_func = logger.info if self._debug_llm_messages else logger.debug
-        log_func("=== LLM Response ===")
-        log_func("response: %s", response)
-        log_func("=== End of Response ===")

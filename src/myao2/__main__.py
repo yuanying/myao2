@@ -121,12 +121,9 @@ async def main() -> None:
         sys.exit(1)
 
     llm_config = config.llm["default"]
-    llm_client = LLMClient(llm_config)
     debug_llm_messages = bool(config.logging and config.logging.debug_llm_messages)
-    response_generator = LiteLLMResponseGenerator(
-        llm_client,
-        debug_llm_messages=debug_llm_messages,
-    )
+    llm_client = LLMClient(llm_config, debug_llm_messages=debug_llm_messages)
+    response_generator = LiteLLMResponseGenerator(llm_client)
 
     # Initialize use case for mention replies
     reply_use_case = ReplyToMentionUseCase(
@@ -158,7 +155,9 @@ async def main() -> None:
     # Initialize autonomous response components
     # Use judgment LLM config if available, otherwise use default
     judgment_llm_config = config.llm.get("judgment", config.llm["default"])
-    judgment_llm_client = LLMClient(judgment_llm_config)
+    judgment_llm_client = LLMClient(
+        judgment_llm_config, debug_llm_messages=debug_llm_messages
+    )
     response_judgment = LLMResponseJudgment(client=judgment_llm_client)
 
     channel_monitor = DBChannelMonitor(
@@ -193,7 +192,9 @@ async def main() -> None:
         config.memory.memory_generation_llm,
         config.llm["default"],
     )
-    memory_llm_client = LLMClient(memory_llm_config)
+    memory_llm_client = LLMClient(
+        memory_llm_config, debug_llm_messages=debug_llm_messages
+    )
     memory_summarizer = LLMMemorySummarizer(
         client=memory_llm_client,
         config=config.memory,
