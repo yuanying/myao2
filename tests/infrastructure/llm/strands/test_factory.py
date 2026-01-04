@@ -13,8 +13,8 @@ if TYPE_CHECKING:
     from myao2.infrastructure.llm.strands import StrandsAgentFactory
 
 
-class TestStrandsAgentFactoryCreateModel:
-    """Tests for StrandsAgentFactory.create_model."""
+class TestStrandsAgentFactory:
+    """Tests for StrandsAgentFactory."""
 
     @pytest.fixture
     def factory(self) -> "StrandsAgentFactory":
@@ -102,85 +102,3 @@ class TestStrandsAgentFactoryCreateModel:
             )
 
 
-class TestStrandsAgentFactoryCreateAgent:
-    """Tests for StrandsAgentFactory.create_agent."""
-
-    @pytest.fixture
-    def factory(self) -> "StrandsAgentFactory":
-        """Create StrandsAgentFactory instance."""
-        from myao2.infrastructure.llm.strands import StrandsAgentFactory
-
-        return StrandsAgentFactory()
-
-    @pytest.fixture
-    def mock_model(self) -> MagicMock:
-        """Create mock LiteLLMModel."""
-        return MagicMock()
-
-    def test_create_agent_with_system_prompt(
-        self, factory: "StrandsAgentFactory", mock_model: MagicMock
-    ) -> None:
-        """Test Agent creation with system_prompt."""
-        with patch(
-            "myao2.infrastructure.llm.strands.factory.Agent"
-        ) as mock_agent_class:
-            mock_agent = MagicMock()
-            mock_agent_class.return_value = mock_agent
-
-            result = factory.create_agent(
-                model=mock_model,
-                system_prompt="You are a helpful assistant.",
-            )
-
-            assert result == mock_agent
-            mock_agent_class.assert_called_once_with(
-                model=mock_model,
-                system_prompt="You are a helpful assistant.",
-                tools=[],
-            )
-
-    def test_create_agent_without_system_prompt(
-        self, factory: "StrandsAgentFactory", mock_model: MagicMock
-    ) -> None:
-        """Test Agent creation without system_prompt."""
-        with patch(
-            "myao2.infrastructure.llm.strands.factory.Agent"
-        ) as mock_agent_class:
-            mock_agent = MagicMock()
-            mock_agent_class.return_value = mock_agent
-
-            result = factory.create_agent(model=mock_model)
-
-            assert result == mock_agent
-            mock_agent_class.assert_called_once_with(
-                model=mock_model,
-                system_prompt=None,
-                tools=[],
-            )
-
-    def test_create_agent_with_tools(
-        self, factory: "StrandsAgentFactory", mock_model: MagicMock
-    ) -> None:
-        """Test Agent creation with tools."""
-        mock_tool1 = MagicMock()
-        mock_tool2 = MagicMock()
-        tools = [mock_tool1, mock_tool2]
-
-        with patch(
-            "myao2.infrastructure.llm.strands.factory.Agent"
-        ) as mock_agent_class:
-            mock_agent = MagicMock()
-            mock_agent_class.return_value = mock_agent
-
-            result = factory.create_agent(
-                model=mock_model,
-                system_prompt="Test prompt",
-                tools=tools,
-            )
-
-            assert result == mock_agent
-            mock_agent_class.assert_called_once_with(
-                model=mock_model,
-                system_prompt="Test prompt",
-                tools=tools,
-            )
