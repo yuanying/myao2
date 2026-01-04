@@ -1,6 +1,8 @@
 """Autonomous response use case."""
 
+import asyncio
 import logging
+import random
 from datetime import datetime, timedelta, timezone
 
 from myao2.application.use_cases.helpers import (
@@ -24,6 +26,32 @@ from myao2.domain.services.channel_monitor import ChannelMonitor
 from myao2.domain.services.response_judgment import ResponseJudgment
 
 logger = logging.getLogger(__name__)
+
+
+def calculate_wait_with_jitter(
+    min_wait_seconds: int,
+    jitter_ratio: float,
+) -> int:
+    """jitter を適用した待機時間を計算する
+
+    Args:
+        min_wait_seconds: 基準の最小待機時間（秒）
+        jitter_ratio: ばらつきの割合（0.0-1.0）
+
+    Returns:
+        jitter 適用後の待機時間（秒）
+
+    Example:
+        min_wait_seconds=300, jitter_ratio=0.3 の場合
+        → 210〜390 秒の範囲でランダムに決定
+    """
+    if jitter_ratio <= 0:
+        return min_wait_seconds
+
+    jitter = min_wait_seconds * jitter_ratio
+    min_time = max(0, int(min_wait_seconds - jitter))
+    max_time = int(min_wait_seconds + jitter)
+    return random.randint(min_time, max_time)
 
 
 class AutonomousResponseUseCase:
@@ -100,13 +128,32 @@ class AutonomousResponseUseCase:
         Args:
             channel: The channel to check.
         """
+        # jitter 適用
+        wait_seconds = calculate_wait_with_jitter(
+            self._config.response.min_wait_seconds,
+            self._config.response.jitter_ratio,
+        )
+        logger.debug(
+            "Checking channel %s with wait_seconds=%d (jitter applied from %d)",
+            channel.id,
+            wait_seconds,
+            self._config.response.min_wait_seconds,
+        )
+
         unreplied_threads = await self._channel_monitor.get_unreplied_threads(
             channel_id=channel.id,
-            min_wait_seconds=self._config.response.min_wait_seconds,
+            min_wait_seconds=wait_seconds,
             max_message_age_seconds=self._config.response.max_message_age_seconds,
         )
 
-        for thread_ts in unreplied_threads:
+        interval = self._config.response.response_interval
+        for i, thread_ts in enumerate(unreplied_threads):
+            # 2つ目以降のスレッドにはランダム間隔を追加
+            if i > 0 and interval is not None:
+                sleep_time = random.uniform(interval.min, interval.max)
+                logger.debug("Sleeping %.2f seconds before next thread", sleep_time)
+                await asyncio.sleep(sleep_time)
+
             try:
                 logger.info(
                     "Processing unreplied thread %s in channel %s",

@@ -84,17 +84,27 @@ class JudgmentSkipConfig:
 
 
 @dataclass
+class ResponseIntervalConfig:
+    """スレッド間応答間隔設定"""
+
+    min: float = 3.0
+    max: float = 10.0
+
+
+@dataclass
 class ResponseConfig:
     """自律応答設定"""
 
     check_interval_seconds: int = 60
     min_wait_seconds: int = 300
+    jitter_ratio: float = 0.3
     message_limit: int = 20
     max_message_age_seconds: int = 43200  # 12 hours
     channel_messages_limit: int = 50
     active_channel_days: int = 7
     thread_memory_days: int = 7
     judgment_skip: JudgmentSkipConfig | None = None
+    response_interval: ResponseIntervalConfig | None = None
 
 
 @dataclass

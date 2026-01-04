@@ -16,6 +16,7 @@ from myao2.config.models import (
     MemoryConfig,
     PersonaConfig,
     ResponseConfig,
+    ResponseIntervalConfig,
     SlackConfig,
 )
 
@@ -198,11 +199,27 @@ def load_config(path: str | Path) -> Config:
             default_skip_seconds=judgment_skip_data.get("default_skip_seconds", 600),
         )
 
+    # jitter_ratio のバリデーション（0.0-1.0にクリップ）
+    jitter_ratio_raw = response_data.get("jitter_ratio", 0.3)
+    jitter_ratio = max(0.0, min(1.0, jitter_ratio_raw))
+
+    # ResponseIntervalConfig（デフォルト値を設定）
+    response_interval_data = response_data.get("response_interval")
+    if response_interval_data is not None:
+        response_interval: ResponseIntervalConfig | None = ResponseIntervalConfig(
+            min=response_interval_data.get("min", 3.0),
+            max=response_interval_data.get("max", 10.0),
+        )
+    else:
+        response_interval = ResponseIntervalConfig()
+
     response = ResponseConfig(
         check_interval_seconds=response_data.get("check_interval_seconds", 60),
         min_wait_seconds=response_data.get("min_wait_seconds", 300),
+        jitter_ratio=jitter_ratio,
         message_limit=response_data.get("message_limit", 20),
         judgment_skip=judgment_skip_config,
+        response_interval=response_interval,
     )
 
     # LoggingConfig (optional)
