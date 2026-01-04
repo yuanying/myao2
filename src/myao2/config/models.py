@@ -18,11 +18,13 @@ class AgentConfig:
 
     Attributes:
         model_id: LiteLLMのモデルID（例: "openai/gpt-4o"）
+        system_prompt: Agent固有のシステムプロンプト（オプション）
         params: LLMパラメーター（temperature, max_tokens等）
         client_args: LiteLLMクライアント引数（api_key, api_base等）
     """
 
     model_id: str
+    system_prompt: str | None = None
     params: dict[str, Any] = field(default_factory=dict)
     client_args: dict[str, Any] = field(default_factory=dict)
 

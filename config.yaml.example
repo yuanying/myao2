@@ -10,6 +10,9 @@ agents:
   # 応答生成用
   response:
     model_id: "openai/gpt-4o"
+    # system_prompt: |
+    #   応答生成時の追加指示をここに記述。
+    #   persona.system_prompt と結合されます。
     params:
       temperature: 0.7
       max_tokens: 1000
@@ -19,6 +22,8 @@ agents:
   # 応答判定用
   judgment:
     model_id: "openai/gpt-4o-mini"
+    # system_prompt: |
+    #   応答判定時の追加指示をここに記述。
     params:
       temperature: 0.3
       max_tokens: 500
@@ -28,6 +33,8 @@ agents:
   # 記憶生成用
   memory:
     model_id: "openai/gpt-4o"
+    # system_prompt: |
+    #   記憶要約時の追加指示をここに記述。
     params:
       temperature: 0.5
       max_tokens: 800
