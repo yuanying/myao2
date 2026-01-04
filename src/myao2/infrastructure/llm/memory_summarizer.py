@@ -59,6 +59,7 @@ class LLMMemorySummarizer(MemorySummarizer):
 
         response = await self._client.complete(
             llm_messages,
+            caller="memory_summarizer",
             max_tokens=max_tokens,
         )
 

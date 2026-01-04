@@ -46,8 +46,7 @@ class LLMResponseJudgment:
         try:
             system_prompt = self.build_system_prompt(context)
             messages = [{"role": "system", "content": system_prompt}]
-            response = await self._client.complete(messages)
-            logger.debug("LLM judgment response: %s", response)
+            response = await self._client.complete(messages, caller="response_judgment")
             result = self._parse_response(response)
             logger.info(
                 "Response judgment: should_respond=%s, reason=%s",

@@ -169,7 +169,7 @@ async def run_generate(
     # LLMクライアント初期化
     llm_config = config.llm["default"]
     llm_client = LLMClient(llm_config)
-    generator = LiteLLMResponseGenerator(llm_client, debug_llm_messages=False)
+    generator = LiteLLMResponseGenerator(llm_client)
 
     # プロンプト構築
     system_prompt = generator.build_system_prompt(context)
