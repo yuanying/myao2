@@ -171,10 +171,10 @@ logging:
 
 ## 完了基準
 
-- [ ] LLMClient にログ出力メソッドが実装されている
-- [ ] LLMClient.complete に caller パラメータが追加されている
-- [ ] LiteLLMResponseGenerator が caller を指定して呼び出している
-- [ ] LLMResponseJudgment が caller を指定して呼び出している
-- [ ] LLMMemorySummarizer が caller を指定して呼び出している
-- [ ] debug_llm_messages フラグでログ出力を制御できる
-- [ ] 全テストが通過する
+- [x] LLMClient にログ出力メソッドが実装されている
+- [x] LLMClient.complete に caller パラメータが追加されている
+- [x] LiteLLMResponseGenerator が caller を指定して呼び出している
+- [x] LLMResponseJudgment が caller を指定して呼び出している
+- [x] LLMMemorySummarizer が caller を指定して呼び出している
+- [x] debug_llm_messages フラグでログ出力を制御できる
+- [x] 全テストが通過する
