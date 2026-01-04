@@ -48,6 +48,10 @@ MemorySummarizer Protocol の strands-agents ベース実装を作成する。
 
 ```jinja2
 {{ persona.system_prompt }}
+{% if agent_system_prompt %}
+
+{{ agent_system_prompt }}
+{% endif %}
 
 あなたは会話履歴を要約するアシスタントです。
 
@@ -260,7 +264,7 @@ MemorySummarizer Protocol の strands-agents ベース実装を作成する。
 from strands import Agent
 from strands.models.litellm import LiteLLMModel
 
-from myao2.config.models import MemoryConfig
+from myao2.config.models import AgentConfig, MemoryConfig
 from myao2.domain.entities import Context, MemoryScope, MemoryType
 from myao2.domain.services.protocols import MemorySummarizer
 from myao2.infrastructure.llm.strands import map_strands_exception
@@ -270,15 +274,22 @@ from myao2.infrastructure.llm.templates import create_jinja_env, format_timestam
 class StrandsMemorySummarizer:
     """strands-agents ベースの MemorySummarizer 実装"""
 
-    def __init__(self, model: LiteLLMModel, config: MemoryConfig) -> None:
+    def __init__(
+        self,
+        model: LiteLLMModel,
+        config: MemoryConfig,
+        agent_config: AgentConfig | None = None,
+    ) -> None:
         """初期化
 
         Args:
             model: LiteLLMModel インスタンス（再利用される）
             config: メモリ設定
+            agent_config: Agent 設定（オプション、system_prompt 等を含む）
         """
         self._model = model
         self._config = config
+        self._agent_config = agent_config
         self._jinja_env = create_jinja_env()
         self._jinja_env.filters["format_timestamp"] = format_timestamp
         self._system_template = self._jinja_env.get_template("memory_system.j2")
@@ -329,8 +340,12 @@ class StrandsMemorySummarizer:
         memory_type: MemoryType,
     ) -> str:
         """システムプロンプト（固定部分）を構築"""
+        agent_system_prompt = (
+            self._agent_config.system_prompt if self._agent_config else None
+        )
         return self._system_template.render(
             persona=context.persona,
+            agent_system_prompt=agent_system_prompt,
             scope=scope.value.lower(),
             memory_type=memory_type.value.lower(),
         )

@@ -80,6 +80,10 @@ class JudgmentOutput(BaseModel):
 
 ```jinja2
 {{ persona.system_prompt }}
+{% if agent_system_prompt %}
+
+{{ agent_system_prompt }}
+{% endif %}
 
 あなたは会話への参加判断を行います。
 
@@ -205,6 +209,7 @@ from datetime import datetime, timezone
 from strands import Agent
 from strands.models.litellm import LiteLLMModel
 
+from myao2.config.models import AgentConfig
 from myao2.domain.entities import Context, JudgmentResult
 from myao2.domain.services.protocols import ResponseJudgment
 from myao2.infrastructure.llm.strands import map_strands_exception
@@ -218,13 +223,19 @@ class StrandsResponseJudgment:
     Structured Output を使用して型安全な JSON 出力を実現する。
     """
 
-    def __init__(self, model: LiteLLMModel) -> None:
+    def __init__(
+        self,
+        model: LiteLLMModel,
+        agent_config: AgentConfig | None = None,
+    ) -> None:
         """初期化
 
         Args:
             model: LiteLLMModel インスタンス（再利用される）
+            agent_config: Agent 設定（オプション、system_prompt 等を含む）
         """
         self._model = model
+        self._agent_config = agent_config
         self._jinja_env = create_jinja_env()
         self._jinja_env.filters["format_timestamp"] = format_timestamp
         self._system_template = self._jinja_env.get_template("judgment_system.j2")
@@ -266,8 +277,12 @@ class StrandsResponseJudgment:
 
     def _build_system_prompt(self, context: Context) -> str:
         """システムプロンプト（固定部分）を構築"""
+        agent_system_prompt = (
+            self._agent_config.system_prompt if self._agent_config else None
+        )
         return self._system_template.render(
             persona=context.persona,
+            agent_system_prompt=agent_system_prompt,
         )
 
     def _build_query_prompt(self, context: Context) -> str:

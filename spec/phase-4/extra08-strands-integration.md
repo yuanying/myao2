@@ -200,9 +200,9 @@ dependencies = [
 
 ## 完了基準
 
-- [ ] 08a: AgentConfig が実装されている
-- [ ] 08b: StrandsAgentFactory が実装されている
-- [ ] 08c: StrandsResponseGenerator が実装されている
+- [x] 08a: AgentConfig が実装されている
+- [x] 08b: StrandsAgentFactory が実装されている
+- [x] 08c: StrandsResponseGenerator が実装されている
 - [ ] 08d: StrandsResponseJudgment が Structured Output で実装されている
 - [ ] 08e: StrandsMemorySummarizer が実装されている
 - [ ] 08f: エントリポイントが新実装に切り替わっている

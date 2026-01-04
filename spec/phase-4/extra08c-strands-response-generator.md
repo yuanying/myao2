@@ -148,8 +148,7 @@ from strands import Agent
 from strands.models.litellm import LiteLLMModel
 
 from myao2.domain.entities import Context
-from myao2.domain.services.protocols import ResponseGenerator
-from myao2.infrastructure.llm.strands import map_strands_exception
+from myao2.infrastructure.llm.strands.exceptions import map_strands_exception
 from myao2.infrastructure.llm.templates import create_jinja_env, format_timestamp
 
 
@@ -177,8 +176,8 @@ class StrandsResponseGenerator:
         Returns:
             生成された応答テキスト
         """
-        system_prompt = self._build_system_prompt(context)
-        query_prompt = self._build_query_prompt(context)
+        system_prompt = self.build_system_prompt(context)
+        query_prompt = self.build_query_prompt(context)
 
         # Agent をリクエストごとに生成（system_prompt が動的なため）
         agent = Agent(
@@ -192,23 +191,32 @@ class StrandsResponseGenerator:
         except Exception as e:
             raise map_strands_exception(e)
 
-    def _build_system_prompt(self, context: Context) -> str:
+    def build_system_prompt(self, context: Context) -> str:
         """システムプロンプト（固定部分）を構築"""
         return self._system_template.render(
             persona=context.persona,
         )
 
-    def _build_query_prompt(self, context: Context) -> str:
+    def build_query_prompt(self, context: Context) -> str:
         """クエリプロンプト（動的部分）を構築"""
+        channel_messages = context.conversation_history
+
+        if context.target_thread_ts:
+            target_thread_messages = channel_messages.get_thread(
+                context.target_thread_ts
+            )
+        else:
+            target_thread_messages = channel_messages.top_level_messages
+
         return self._query_template.render(
             workspace_long_term_memory=context.workspace_long_term_memory,
             workspace_short_term_memory=context.workspace_short_term_memory,
             channel_memories=context.channel_memories,
-            current_channel_name=context.current_channel_name,
-            top_level_messages=context.top_level_messages,
-            thread_messages=context.thread_messages,
+            current_channel_name=channel_messages.channel_name,
+            top_level_messages=channel_messages.top_level_messages,
+            thread_messages=channel_messages.thread_messages,
             target_thread_ts=context.target_thread_ts,
-            target_thread_messages=context.target_thread_messages,
+            target_thread_messages=target_thread_messages,
         )
 ```
 
@@ -221,19 +229,19 @@ class StrandsResponseGenerator:
 | generate | 正常な Context | 応答テキストが返される |
 | generate | トップレベル返信 | 適切なプロンプトで Agent が呼び出される |
 | generate | スレッド返信 | target_thread_ts が含まれるプロンプト |
-| _build_system_prompt | ペルソナ設定あり | ペルソナの system_prompt が含まれる |
-| _build_query_prompt | 記憶あり | 記憶セクションが含まれる |
-| _build_query_prompt | 記憶なし | 記憶セクションが含まれない |
-| _build_query_prompt | channel_memories あり | チャンネル情報が含まれる |
+| build_system_prompt | ペルソナ設定あり | ペルソナの system_prompt が含まれる |
+| build_query_prompt | 記憶あり | 記憶セクションが含まれる |
+| build_query_prompt | 記憶なし | 記憶セクションが含まれない |
+| build_query_prompt | channel_memories あり | チャンネル情報が含まれる |
 | generate | LLMエラー発生 | map_strands_exception で変換される |
 
 ---
 
 ## 完了基準
 
-- [ ] StrandsResponseGenerator が ResponseGenerator Protocol を実装している
-- [ ] response_system.j2 が作成されている
-- [ ] response_query.j2 が作成されている
-- [ ] Model は保持され、Agent はリクエストごとに生成される
-- [ ] 例外が map_strands_exception で変換される
-- [ ] 全テストが通過する
+- [x] StrandsResponseGenerator が ResponseGenerator Protocol を実装している
+- [x] response_system.j2 が作成されている
+- [x] response_query.j2 が作成されている
+- [x] Model は保持され、Agent はリクエストごとに生成される
+- [x] 例外が map_strands_exception で変換される
+- [x] 全テストが通過する
