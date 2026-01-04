@@ -15,6 +15,7 @@ from myao2.config import (
     MemoryConfig,
     PersonaConfig,
     ResponseConfig,
+    ResponseIntervalConfig,
     SlackConfig,
     expand_env_vars,
     load_config,
@@ -683,3 +684,236 @@ memory:
         config = load_config(config_path)
 
         assert config.memory.memory_generation_llm == "nonexistent_llm"
+
+
+class TestResponseIntervalConfigDataClass:
+    """ResponseIntervalConfigデータクラスのテスト"""
+
+    def test_response_interval_config_with_defaults(self) -> None:
+        """ResponseIntervalConfigのデフォルト値が正しい"""
+        config = ResponseIntervalConfig()
+        assert config.min == 3.0
+        assert config.max == 10.0
+
+    def test_response_interval_config_custom_values(self) -> None:
+        """ResponseIntervalConfigのカスタム値が設定できる"""
+        config = ResponseIntervalConfig(min=1.0, max=5.0)
+        assert config.min == 1.0
+        assert config.max == 5.0
+
+
+class TestResponseConfigJitterRatio:
+    """ResponseConfigのjitter_ratio関連テスト"""
+
+    def test_response_config_jitter_ratio_default(self) -> None:
+        """jitter_ratioのデフォルト値が0.3"""
+        config = ResponseConfig()
+        assert config.jitter_ratio == 0.3
+
+    def test_response_config_jitter_ratio_custom(self) -> None:
+        """jitter_ratioのカスタム値が設定できる"""
+        config = ResponseConfig(jitter_ratio=0.5)
+        assert config.jitter_ratio == 0.5
+
+    def test_response_config_response_interval_default(self) -> None:
+        """response_intervalのデフォルト値がNone"""
+        config = ResponseConfig()
+        assert config.response_interval is None
+
+    def test_response_config_response_interval_custom(self) -> None:
+        """response_intervalのカスタム値が設定できる"""
+        interval = ResponseIntervalConfig(min=2.0, max=8.0)
+        config = ResponseConfig(response_interval=interval)
+        assert config.response_interval is not None
+        assert config.response_interval.min == 2.0
+        assert config.response_interval.max == 8.0
+
+
+class TestLoadConfigWithJitterRatio:
+    """load_config関数のjitter_ratio関連テスト"""
+
+    def test_load_config_with_jitter_ratio(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """jitter_ratioが正しく読み込まれる"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+
+response:
+  jitter_ratio: 0.5
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.response.jitter_ratio == 0.5
+
+    def test_load_config_without_jitter_ratio(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """jitter_ratio未指定時はデフォルト値0.3"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+
+response:
+  min_wait_seconds: 300
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.response.jitter_ratio == 0.3
+
+    def test_load_config_jitter_ratio_negative_clipped(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """jitter_ratioが負の値の場合0.0にクリップ"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+
+response:
+  jitter_ratio: -0.5
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.response.jitter_ratio == 0.0
+
+    def test_load_config_jitter_ratio_over_one_clipped(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """jitter_ratioが1.0超の場合1.0にクリップ"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+
+response:
+  jitter_ratio: 1.5
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.response.jitter_ratio == 1.0
+
+    def test_load_config_with_response_interval(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """response_intervalが正しく読み込まれる"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+
+response:
+  response_interval:
+    min: 2.0
+    max: 8.0
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.response.response_interval is not None
+        assert config.response.response_interval.min == 2.0
+        assert config.response.response_interval.max == 8.0
+
+    def test_load_config_without_response_interval(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """response_interval未指定時はデフォルト値{min: 3.0, max: 10.0}"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+llm:
+  default:
+    model: "gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+
+response:
+  min_wait_seconds: 300
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.response.response_interval is not None
+        assert config.response.response_interval.min == 3.0
+        assert config.response.response_interval.max == 10.0

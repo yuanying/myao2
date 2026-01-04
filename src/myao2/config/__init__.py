@@ -16,6 +16,7 @@ from myao2.config.models import (
     MemoryConfig,
     PersonaConfig,
     ResponseConfig,
+    ResponseIntervalConfig,
     SlackConfig,
 )
 
@@ -31,6 +32,7 @@ __all__ = [
     "MemoryConfig",
     "PersonaConfig",
     "ResponseConfig",
+    "ResponseIntervalConfig",
     "SlackConfig",
     "expand_env_vars",
     "load_config",

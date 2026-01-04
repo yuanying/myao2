@@ -6,7 +6,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from myao2.application.use_cases.autonomous_response import AutonomousResponseUseCase
+from myao2.application.use_cases.autonomous_response import (
+    AutonomousResponseUseCase,
+    calculate_wait_with_jitter,
+)
 from myao2.config import (
     Config,
     JudgmentSkipConfig,
@@ -15,6 +18,7 @@ from myao2.config import (
     MemoryConfig,
     PersonaConfig,
     ResponseConfig,
+    ResponseIntervalConfig,
     SlackConfig,
 )
 from myao2.domain.entities import Channel, Context, Message, User
@@ -208,11 +212,11 @@ class TestAutonomousResponseUseCaseExecute:
 
         await use_case.execute()
 
-        mock_channel_monitor.get_unreplied_threads.assert_awaited_once_with(
-            channel_id=channel.id,
-            min_wait_seconds=300,
-            max_message_age_seconds=43200,
-        )
+        # jitter 適用後の値は 210-390 の範囲内
+        call_args = mock_channel_monitor.get_unreplied_threads.call_args
+        assert call_args.kwargs["channel_id"] == channel.id
+        assert 210 <= call_args.kwargs["min_wait_seconds"] <= 390
+        assert call_args.kwargs["max_message_age_seconds"] == 43200
         mock_response_judgment.judge.assert_not_awaited()
         mock_messaging_service.send_message.assert_not_awaited()
 
@@ -1151,3 +1155,102 @@ class TestAutonomousResponseUseCaseChannelSync:
         await use_case.execute()
 
         mock_channel_sync_service.sync_with_cleanup.assert_awaited_once()
+
+
+class TestCalculateWaitWithJitter:
+    """Tests for calculate_wait_with_jitter function."""
+
+    def test_jitter_ratio_zero_returns_original(self) -> None:
+        """jitter_ratio=0.0 の場合は元の値が返される"""
+        result = calculate_wait_with_jitter(300, 0.0)
+        assert result == 300
+
+    def test_jitter_ratio_positive_returns_in_range(self) -> None:
+        """jitter_ratio=0.3 の場合は 210〜390 の範囲内"""
+        for _ in range(100):
+            result = calculate_wait_with_jitter(300, 0.3)
+            assert 210 <= result <= 390
+
+    def test_jitter_different_values(self) -> None:
+        """複数回呼び出すと異なる値が返る（確率的）"""
+        results = set()
+        for _ in range(100):
+            results.add(calculate_wait_with_jitter(300, 0.3))
+        # 100回呼んで少なくとも5種類の異なる値が出るはず
+        assert len(results) >= 5
+
+    def test_jitter_min_time_not_negative(self) -> None:
+        """min_time が負にならない"""
+        result = calculate_wait_with_jitter(10, 1.0)
+        assert result >= 0
+
+
+class TestAutonomousResponseUseCaseJitter:
+    """Tests for jitter functionality in check_channel."""
+
+    @pytest.fixture
+    def config_with_jitter(self) -> Config:
+        """Create test config with jitter enabled."""
+        return Config(
+            slack=SlackConfig(bot_token="xoxb-test", app_token="xapp-test"),
+            llm={"default": LLMConfig(model="gpt-4")},
+            persona=PersonaConfig(
+                name="TestBot", system_prompt="You are a friendly bot."
+            ),
+            memory=MemoryConfig(database_path=":memory:"),
+            response=ResponseConfig(
+                check_interval_seconds=60,
+                min_wait_seconds=300,
+                jitter_ratio=0.3,
+                message_limit=20,
+                response_interval=ResponseIntervalConfig(min=3.0, max=10.0),
+            ),
+        )
+
+    @pytest.fixture
+    def use_case_with_jitter(
+        self,
+        mock_channel_monitor: Mock,
+        mock_response_judgment: Mock,
+        mock_response_generator: Mock,
+        mock_messaging_service: Mock,
+        mock_message_repository: Mock,
+        mock_judgment_cache_repository: Mock,
+        mock_channel_repository: Mock,
+        mock_memory_repository: Mock,
+        config_with_jitter: Config,
+        bot_user_id: str,
+    ) -> AutonomousResponseUseCase:
+        """Create use case instance with jitter enabled."""
+        return AutonomousResponseUseCase(
+            channel_monitor=mock_channel_monitor,
+            response_judgment=mock_response_judgment,
+            response_generator=mock_response_generator,
+            messaging_service=mock_messaging_service,
+            message_repository=mock_message_repository,
+            judgment_cache_repository=mock_judgment_cache_repository,
+            channel_repository=mock_channel_repository,
+            memory_repository=mock_memory_repository,
+            config=config_with_jitter,
+            bot_user_id=bot_user_id,
+        )
+
+    async def test_check_channel_uses_jitter_wait_seconds(
+        self,
+        use_case_with_jitter: AutonomousResponseUseCase,
+        mock_channel_monitor: Mock,
+        channel: Channel,
+    ) -> None:
+        """check_channel は jitter 適用後の wait_seconds を使用する"""
+        mock_channel_monitor.get_unreplied_threads.return_value = []
+
+        # 複数回実行して、異なる wait_seconds が使用されることを確認
+        wait_seconds_used = set()
+        for _ in range(10):
+            await use_case_with_jitter.check_channel(channel)
+            call_args = mock_channel_monitor.get_unreplied_threads.call_args
+            wait_seconds_used.add(call_args.kwargs["min_wait_seconds"])
+
+        # 210-390 の範囲内であること
+        for ws in wait_seconds_used:
+            assert 210 <= ws <= 390
