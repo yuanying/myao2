@@ -330,10 +330,10 @@ class StrandsResponseJudgment:
 
 ## 完了基準
 
-- [ ] JudgmentOutput Pydantic モデルが実装されている
-- [ ] StrandsResponseJudgment が ResponseJudgment Protocol を実装している
-- [ ] judgment_system.j2 が作成されている（JSON 形式指定なし）
-- [ ] judgment_query.j2 が作成されている
-- [ ] Structured Output を使用して型安全な出力を取得している
-- [ ] JSON パースロジックが不要になっている
-- [ ] 全テストが通過する
+- [x] JudgmentOutput Pydantic モデルが実装されている
+- [x] StrandsResponseJudgment が ResponseJudgment Protocol を実装している
+- [x] judgment_system.j2 が作成されている（JSON 形式指定なし）
+- [x] judgment_query.j2 が作成されている
+- [x] Structured Output を使用して型安全な出力を取得している
+- [x] JSON パースロジックが不要になっている
+- [x] 全テストが通過する

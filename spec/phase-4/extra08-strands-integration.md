@@ -203,7 +203,7 @@ dependencies = [
 - [x] 08a: AgentConfig が実装されている
 - [x] 08b: StrandsAgentFactory が実装されている
 - [x] 08c: StrandsResponseGenerator が実装されている
-- [ ] 08d: StrandsResponseJudgment が Structured Output で実装されている
+- [x] 08d: StrandsResponseJudgment が Structured Output で実装されている
 - [ ] 08e: StrandsMemorySummarizer が実装されている
 - [ ] 08f: エントリポイントが新実装に切り替わっている
 - [ ] 08f: 旧実装ファイルが全て削除されている
