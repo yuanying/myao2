@@ -813,7 +813,7 @@ class TestLLMMemorySummarizerTemplateRendering:
             target_thread_ts="1234567890.000001",
         )
 
-        rendered = summarizer._build_system_prompt(
+        rendered = summarizer.build_system_prompt(
             context=context,
             scope=MemoryScope.THREAD,
             memory_type=MemoryType.SHORT_TERM,
@@ -840,7 +840,7 @@ class TestLLMMemorySummarizerTemplateRendering:
             workspace_long_term_memory="WS長期記憶",
         )
 
-        rendered = summarizer._build_system_prompt(
+        rendered = summarizer.build_system_prompt(
             context=context,
             scope=MemoryScope.CHANNEL,
             memory_type=MemoryType.SHORT_TERM,
@@ -870,7 +870,7 @@ class TestLLMMemorySummarizerTemplateRendering:
             channel_memories={"C123": channel},
         )
 
-        rendered = summarizer._build_system_prompt(
+        rendered = summarizer.build_system_prompt(
             context=context,
             scope=MemoryScope.CHANNEL,
             memory_type=MemoryType.LONG_TERM,
@@ -902,7 +902,7 @@ class TestLLMMemorySummarizerTemplateRendering:
             },
         )
 
-        rendered = summarizer._build_system_prompt(
+        rendered = summarizer.build_system_prompt(
             context=context,
             scope=MemoryScope.WORKSPACE,
             memory_type=MemoryType.SHORT_TERM,
@@ -933,7 +933,7 @@ class TestLLMMemorySummarizerTemplateRendering:
             },
         )
 
-        rendered = summarizer._build_system_prompt(
+        rendered = summarizer.build_system_prompt(
             context=context,
             scope=MemoryScope.WORKSPACE,
             memory_type=MemoryType.LONG_TERM,
