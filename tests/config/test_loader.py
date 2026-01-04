@@ -8,10 +8,10 @@ import pytest
 import yaml
 
 from myao2.config import (
+    AgentConfig,
     Config,
     ConfigValidationError,
     EnvironmentVariableError,
-    LLMConfig,
     MemoryConfig,
     PersonaConfig,
     ResponseConfig,
@@ -36,6 +36,7 @@ def env_vars() -> Generator[dict[str, str], None, None]:
         "TEST_APP_TOKEN": "xapp-test-token",
         "TEST_VAR_A": "valueA",
         "TEST_VAR_B": "valueB",
+        "TEST_API_KEY": "sk-test-api-key",
     }
     # 設定
     for key, value in test_vars.items():
@@ -81,6 +82,19 @@ class TestExpandEnvVars:
         assert result == ""
 
 
+def _get_minimal_agents_config_yaml() -> str:
+    """テスト用の最小agents設定のYAML文字列を返す"""
+    return """
+agents:
+  response:
+    model_id: "openai/gpt-4o"
+  judgment:
+    model_id: "openai/gpt-4o-mini"
+  memory:
+    model_id: "openai/gpt-4o"
+"""
+
+
 class TestLoadConfig:
     """load_config関数のテスト"""
 
@@ -88,17 +102,11 @@ class TestLoadConfig:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """有効な設定ファイルを読み込める"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-    temperature: 0.7
-    max_tokens: 1000
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "テスト用システムプロンプト"
@@ -114,8 +122,8 @@ memory:
         assert isinstance(config, Config)
         assert config.slack.bot_token == "xoxb-test-token"
         assert config.slack.app_token == "xapp-test-token"
-        assert "default" in config.llm
-        assert config.llm["default"].model == "gpt-4o"
+        assert "response" in config.agents
+        assert config.agents["response"].model_id == "openai/gpt-4o"
         assert config.persona.name == "myao"
         assert config.memory.database_path == "./data/memory.db"
 
@@ -123,15 +131,11 @@ memory:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """環境変数が正しく展開される"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "test"
   system_prompt: "test"
@@ -147,72 +151,6 @@ memory:
         assert config.slack.bot_token == "xoxb-test-token"
         assert config.slack.app_token == "xapp-test-token"
 
-    def test_multiple_llm_configs(
-        self, temp_config_dir: Path, env_vars: dict[str, str]
-    ) -> None:
-        """複数のLLM設定を読み込める"""
-        config_content = """
-slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-    temperature: 0.7
-    max_tokens: 1000
-  judgment:
-    model: "gpt-4o-mini"
-    temperature: 0.3
-    max_tokens: 500
-
-persona:
-  name: "myao"
-  system_prompt: "test"
-
-memory:
-  database_path: "./data/memory.db"
-"""
-        config_path = temp_config_dir / "config.yaml"
-        config_path.write_text(config_content)
-
-        config = load_config(config_path)
-
-        assert "default" in config.llm
-        assert "judgment" in config.llm
-        assert config.llm["default"].model == "gpt-4o"
-        assert config.llm["default"].temperature == 0.7
-        assert config.llm["judgment"].model == "gpt-4o-mini"
-        assert config.llm["judgment"].temperature == 0.3
-
-    def test_llm_config_defaults(
-        self, temp_config_dir: Path, env_vars: dict[str, str]
-    ) -> None:
-        """LLM設定のデフォルト値が適用される"""
-        config_content = """
-slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
-persona:
-  name: "myao"
-  system_prompt: "test"
-
-memory:
-  database_path: "./data/memory.db"
-"""
-        config_path = temp_config_dir / "config.yaml"
-        config_path.write_text(config_content)
-
-        config = load_config(config_path)
-
-        assert config.llm["default"].temperature == 0.7
-        assert config.llm["default"].max_tokens == 1000
-
     def test_file_not_found(self) -> None:
         """存在しないファイルでFileNotFoundErrorが発生"""
         with pytest.raises(FileNotFoundError):
@@ -220,15 +158,11 @@ memory:
 
     def test_undefined_env_var(self, temp_config_dir: Path) -> None:
         """未設定の環境変数でEnvironmentVariableErrorが発生"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${UNDEFINED_TOKEN_12345}
-  app_token: ${UNDEFINED_APP_12345}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{UNDEFINED_TOKEN_12345}}
+  app_token: ${{UNDEFINED_APP_12345}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -243,14 +177,10 @@ persona:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """必須フィールド（slack.bot_token）欠落でConfigValidationErrorが発生"""
-        config_content = """
+        config_content = f"""
 slack:
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -266,11 +196,8 @@ persona:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """必須セクション（slack）欠落でConfigValidationErrorが発生"""
-        config_content = """
-llm:
-  default:
-    model: "gpt-4o"
-
+        config_content = f"""
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -281,30 +208,6 @@ persona:
         with pytest.raises(ConfigValidationError) as exc_info:
             load_config(config_path)
         assert "slack" in str(exc_info.value)
-
-    def test_missing_default_llm(
-        self, temp_config_dir: Path, env_vars: dict[str, str]
-    ) -> None:
-        """llm.defaultが欠落でConfigValidationErrorが発生"""
-        config_content = """
-slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  judgment:
-    model: "gpt-4o-mini"
-
-persona:
-  name: "myao"
-  system_prompt: "test"
-"""
-        config_path = temp_config_dir / "config.yaml"
-        config_path.write_text(config_content)
-
-        with pytest.raises(ConfigValidationError) as exc_info:
-            load_config(config_path)
-        assert "default" in str(exc_info.value)
 
     def test_yaml_syntax_error(self, temp_config_dir: Path) -> None:
         """YAML構文エラーでyaml.YAMLErrorが発生"""
@@ -321,15 +224,11 @@ slack:
 
     def test_string_path(self, temp_config_dir: Path, env_vars: dict[str, str]) -> None:
         """文字列パスでも読み込める"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -354,19 +253,6 @@ class TestDataClasses:
         assert config.bot_token == "token1"
         assert config.app_token == "token2"
 
-    def test_llm_config_with_defaults(self) -> None:
-        """LLMConfigのデフォルト値が正しい"""
-        config = LLMConfig(model="gpt-4o")
-        assert config.model == "gpt-4o"
-        assert config.temperature == 0.7
-        assert config.max_tokens == 1000
-
-    def test_llm_config_custom_values(self) -> None:
-        """LLMConfigのカスタム値が設定できる"""
-        config = LLMConfig(model="gpt-4o", temperature=0.3, max_tokens=500)
-        assert config.temperature == 0.3
-        assert config.max_tokens == 500
-
     def test_persona_config(self) -> None:
         """PersonaConfigが正しく作成される"""
         config = PersonaConfig(name="myao", system_prompt="テストプロンプト")
@@ -376,17 +262,25 @@ class TestDataClasses:
     def test_config(self) -> None:
         """Configが正しく作成される"""
         slack = SlackConfig(bot_token="t1", app_token="t2")
-        llm = {"default": LLMConfig(model="gpt-4o")}
+        agents = {
+            "response": AgentConfig(model_id="openai/gpt-4o"),
+            "judgment": AgentConfig(model_id="openai/gpt-4o-mini"),
+            "memory": AgentConfig(model_id="openai/gpt-4o"),
+        }
         persona = PersonaConfig(name="myao", system_prompt="test")
         memory = MemoryConfig(database_path="./data/memory.db")
         response = ResponseConfig()
 
         config = Config(
-            slack=slack, llm=llm, persona=persona, memory=memory, response=response
+            slack=slack,
+            agents=agents,
+            persona=persona,
+            memory=memory,
+            response=response,
         )
 
         assert config.slack == slack
-        assert config.llm == llm
+        assert config.agents == agents
         assert config.persona == persona
         assert config.memory == memory
         assert config.response == response
@@ -415,15 +309,11 @@ class TestLoadConfigWithResponse:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """responseセクションありの設定ファイルを読み込める"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -449,15 +339,11 @@ response:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """responseセクションなしの場合はデフォルト値が使用される"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -478,15 +364,11 @@ memory:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """responseセクションが部分的な場合、残りはデフォルト値が使用される"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -517,7 +399,6 @@ class TestMemoryConfigDataClass:
         assert config.short_term_window_hours == 24
         assert config.long_term_summary_max_tokens == 500
         assert config.short_term_summary_max_tokens == 300
-        assert config.memory_generation_llm == "default"
 
     def test_memory_config_custom_values(self) -> None:
         """MemoryConfigの全フィールドにカスタム値が設定できる"""
@@ -527,28 +408,24 @@ class TestMemoryConfigDataClass:
             short_term_window_hours=48,
             long_term_summary_max_tokens=1000,
             short_term_summary_max_tokens=600,
-            memory_generation_llm="memory",
         )
         assert config.database_path == "./custom/memory.db"
         assert config.long_term_update_interval_seconds == 7200
         assert config.short_term_window_hours == 48
         assert config.long_term_summary_max_tokens == 1000
         assert config.short_term_summary_max_tokens == 600
-        assert config.memory_generation_llm == "memory"
 
     def test_memory_config_partial_values(self) -> None:
         """MemoryConfigの部分的なカスタム値が設定できる"""
         config = MemoryConfig(
             database_path="./data/memory.db",
             short_term_window_hours=12,
-            memory_generation_llm="custom",
         )
         assert config.database_path == "./data/memory.db"
         assert config.long_term_update_interval_seconds == 3600  # default
         assert config.short_term_window_hours == 12
         assert config.long_term_summary_max_tokens == 500  # default
         assert config.short_term_summary_max_tokens == 300  # default
-        assert config.memory_generation_llm == "custom"
 
 
 class TestLoadConfigWithMemoryExtension:
@@ -558,15 +435,11 @@ class TestLoadConfigWithMemoryExtension:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """全ての新しいmemoryフィールドを読み込める"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -577,7 +450,6 @@ memory:
   short_term_window_hours: 48
   long_term_summary_max_tokens: 1000
   short_term_summary_max_tokens: 600
-  memory_generation_llm: "memory"
 """
         config_path = temp_config_dir / "config.yaml"
         config_path.write_text(config_content)
@@ -589,21 +461,16 @@ memory:
         assert config.memory.short_term_window_hours == 48
         assert config.memory.long_term_summary_max_tokens == 1000
         assert config.memory.short_term_summary_max_tokens == 600
-        assert config.memory.memory_generation_llm == "memory"
 
     def test_load_config_without_new_memory_fields(
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """新しいmemoryフィールドがない場合はデフォルト値が使用される"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -621,21 +488,16 @@ memory:
         assert config.memory.short_term_window_hours == 24
         assert config.memory.long_term_summary_max_tokens == 500
         assert config.memory.short_term_summary_max_tokens == 300
-        assert config.memory.memory_generation_llm == "default"
 
     def test_load_config_with_partial_memory_fields(
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """memoryフィールドが部分的な場合、残りはデフォルト値が使用される"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -643,7 +505,6 @@ persona:
 memory:
   database_path: "./data/memory.db"
   short_term_window_hours: 12
-  memory_generation_llm: "custom"
 """
         config_path = temp_config_dir / "config.yaml"
         config_path.write_text(config_content)
@@ -655,35 +516,6 @@ memory:
         assert config.memory.short_term_window_hours == 12
         assert config.memory.long_term_summary_max_tokens == 500  # default
         assert config.memory.short_term_summary_max_tokens == 300  # default
-        assert config.memory.memory_generation_llm == "custom"
-
-    def test_load_config_memory_generation_llm_nonexistent(
-        self, temp_config_dir: Path, env_vars: dict[str, str]
-    ) -> None:
-        """存在しないLLM設定名でも読み込み成功（使用時に検証）"""
-        config_content = """
-slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
-persona:
-  name: "myao"
-  system_prompt: "test"
-
-memory:
-  database_path: "./data/memory.db"
-  memory_generation_llm: "nonexistent_llm"
-"""
-        config_path = temp_config_dir / "config.yaml"
-        config_path.write_text(config_content)
-
-        config = load_config(config_path)
-
-        assert config.memory.memory_generation_llm == "nonexistent_llm"
 
 
 class TestResponseIntervalConfigDataClass:
@@ -736,15 +568,11 @@ class TestLoadConfigWithJitterRatio:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """jitter_ratioが正しく読み込まれる"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -766,15 +594,11 @@ response:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """jitter_ratio未指定時はデフォルト値0.3"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -796,15 +620,11 @@ response:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """jitter_ratioが負の値の場合0.0にクリップ"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -826,15 +646,11 @@ response:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """jitter_ratioが1.0超の場合1.0にクリップ"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -856,15 +672,11 @@ response:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """response_intervalが正しく読み込まれる"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -890,15 +702,11 @@ response:
         self, temp_config_dir: Path, env_vars: dict[str, str]
     ) -> None:
         """response_interval未指定時はデフォルト値{min: 3.0, max: 10.0}"""
-        config_content = """
+        config_content = f"""
 slack:
-  bot_token: ${TEST_BOT_TOKEN}
-  app_token: ${TEST_APP_TOKEN}
-
-llm:
-  default:
-    model: "gpt-4o"
-
+  bot_token: ${{TEST_BOT_TOKEN}}
+  app_token: ${{TEST_APP_TOKEN}}
+{_get_minimal_agents_config_yaml()}
 persona:
   name: "myao"
   system_prompt: "test"
@@ -917,3 +725,389 @@ response:
         assert config.response.response_interval is not None
         assert config.response.response_interval.min == 3.0
         assert config.response.response_interval.max == 10.0
+
+
+class TestAgentConfigDataClass:
+    """AgentConfigデータクラスのテスト"""
+
+    def test_agent_config_required_model_id(self) -> None:
+        """AgentConfigはmodel_idが必須"""
+        config = AgentConfig(model_id="openai/gpt-4o")
+        assert config.model_id == "openai/gpt-4o"
+
+    def test_agent_config_with_defaults(self) -> None:
+        """AgentConfigのデフォルト値が正しい"""
+        config = AgentConfig(model_id="openai/gpt-4o")
+        assert config.model_id == "openai/gpt-4o"
+        assert config.params == {}
+        assert config.client_args == {}
+
+    def test_agent_config_with_params(self) -> None:
+        """AgentConfigのparamsが設定できる"""
+        config = AgentConfig(
+            model_id="openai/gpt-4o",
+            params={"temperature": 0.7, "max_tokens": 1000},
+        )
+        assert config.params == {"temperature": 0.7, "max_tokens": 1000}
+
+    def test_agent_config_with_client_args(self) -> None:
+        """AgentConfigのclient_argsが設定できる"""
+        config = AgentConfig(
+            model_id="openai/gpt-4o",
+            client_args={"api_key": "sk-test"},
+        )
+        assert config.client_args == {"api_key": "sk-test"}
+
+    def test_agent_config_full(self) -> None:
+        """AgentConfigの全フィールドが設定できる"""
+        config = AgentConfig(
+            model_id="openai/gpt-4o",
+            params={"temperature": 0.7},
+            client_args={"api_key": "sk-test", "api_base": "https://api.example.com"},
+        )
+        assert config.model_id == "openai/gpt-4o"
+        assert config.params == {"temperature": 0.7}
+        assert config.client_args == {
+            "api_key": "sk-test",
+            "api_base": "https://api.example.com",
+        }
+
+
+class TestLoadConfigWithAgents:
+    """load_config関数のagentsセクションテスト"""
+
+    def test_load_config_with_all_agents(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """全agents設定ありで3つのAgentConfigが読み込まれる"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+agents:
+  response:
+    model_id: "openai/gpt-4o"
+    params:
+      temperature: 0.7
+      max_tokens: 1000
+    client_args:
+      api_key: ${TEST_API_KEY}
+
+  judgment:
+    model_id: "openai/gpt-4o-mini"
+    params:
+      temperature: 0.3
+      max_tokens: 500
+    client_args:
+      api_key: ${TEST_API_KEY}
+
+  memory:
+    model_id: "openai/gpt-4o"
+    params:
+      temperature: 0.5
+      max_tokens: 800
+    client_args:
+      api_key: ${TEST_API_KEY}
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert "response" in config.agents
+        assert "judgment" in config.agents
+        assert "memory" in config.agents
+        assert config.agents["response"].model_id == "openai/gpt-4o"
+        assert config.agents["response"].params == {
+            "temperature": 0.7,
+            "max_tokens": 1000,
+        }
+        assert config.agents["response"].client_args == {"api_key": "sk-test-api-key"}
+        assert config.agents["judgment"].model_id == "openai/gpt-4o-mini"
+        assert config.agents["memory"].model_id == "openai/gpt-4o"
+
+    def test_load_config_missing_response_agent(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """responseが欠落でConfigValidationError"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+agents:
+  judgment:
+    model_id: "openai/gpt-4o-mini"
+  memory:
+    model_id: "openai/gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            load_config(config_path)
+        assert "response" in str(exc_info.value)
+
+    def test_load_config_missing_judgment_agent(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """judgmentが欠落でConfigValidationError"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+agents:
+  response:
+    model_id: "openai/gpt-4o"
+  memory:
+    model_id: "openai/gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            load_config(config_path)
+        assert "judgment" in str(exc_info.value)
+
+    def test_load_config_missing_memory_agent(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """memoryが欠落でConfigValidationError"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+agents:
+  response:
+    model_id: "openai/gpt-4o"
+  judgment:
+    model_id: "openai/gpt-4o-mini"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            load_config(config_path)
+        assert "memory" in str(exc_info.value)
+
+    def test_load_config_missing_model_id(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """model_idが欠落でConfigValidationError"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+agents:
+  response:
+    params:
+      temperature: 0.7
+  judgment:
+    model_id: "openai/gpt-4o-mini"
+  memory:
+    model_id: "openai/gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            load_config(config_path)
+        assert "model_id" in str(exc_info.value)
+
+    def test_load_config_params_omitted(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """params省略で空のdictがデフォルト"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+agents:
+  response:
+    model_id: "openai/gpt-4o"
+  judgment:
+    model_id: "openai/gpt-4o-mini"
+  memory:
+    model_id: "openai/gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.agents["response"].params == {}
+        assert config.agents["judgment"].params == {}
+        assert config.agents["memory"].params == {}
+
+    def test_load_config_client_args_omitted(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """client_args省略で空のdictがデフォルト"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+agents:
+  response:
+    model_id: "openai/gpt-4o"
+  judgment:
+    model_id: "openai/gpt-4o-mini"
+  memory:
+    model_id: "openai/gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.agents["response"].client_args == {}
+        assert config.agents["judgment"].client_args == {}
+        assert config.agents["memory"].client_args == {}
+
+    def test_load_config_client_args_env_var_expansion(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """client_argsに${ENV_VAR}で環境変数が展開される"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+agents:
+  response:
+    model_id: "openai/gpt-4o"
+    client_args:
+      api_key: ${TEST_API_KEY}
+  judgment:
+    model_id: "openai/gpt-4o-mini"
+  memory:
+    model_id: "openai/gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.agents["response"].client_args == {"api_key": "sk-test-api-key"}
+
+    def test_load_config_custom_agent(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """追加のagent設定（例: custom）も読み込める"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+agents:
+  response:
+    model_id: "openai/gpt-4o"
+  judgment:
+    model_id: "openai/gpt-4o-mini"
+  memory:
+    model_id: "openai/gpt-4o"
+  custom:
+    model_id: "anthropic/claude-3-opus"
+    params:
+      temperature: 0.9
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert "custom" in config.agents
+        assert config.agents["custom"].model_id == "anthropic/claude-3-opus"
+        assert config.agents["custom"].params == {"temperature": 0.9}
+
+    def test_load_config_missing_agents_section(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """agentsセクション欠落でConfigValidationError（後方互換性テスト）"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            load_config(config_path)
+        assert "agents" in str(exc_info.value)

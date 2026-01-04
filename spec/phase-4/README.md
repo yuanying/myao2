@@ -479,8 +479,15 @@ tests/
 |---|--------|-----------|------|------|
 | extra04 | ResponseJudgment#judge インターフェース簡素化 | [extra04-judgment-interface-simplify.md](./extra04-judgment-interface-simplify.md) | - | 完了 |
 | extra05 | 全LLM呼び出しのJinja2テンプレート化 | [extra05-jinja2-templates.md](./extra05-jinja2-templates.md) | - | 完了 |
-| extra06 | 全LLM呼び出しのログ出力統一 | [extra06-llm-logging.md](./extra06-llm-logging.md) | - | - |
+| extra06 | 全LLM呼び出しのログ出力統一 | [extra06-llm-logging.md](./extra06-llm-logging.md) | - | 完了 |
 | extra07 | min_wait_seconds への jitter 追加 | [extra07-min-wait-jitter.md](./extra07-min-wait-jitter.md) | - | - |
+| extra08 | strands-agents 移行 | [extra08-strands-integration.md](./extra08-strands-integration.md) | - | 進行中 |
+| extra08a | strands-agents 用設定構造の拡張 | [extra08a-strands-config.md](./extra08a-strands-config.md) | - | 完了 |
+| extra08b | Agent ファクトリーの実装 | [extra08b-agent-factory.md](./extra08b-agent-factory.md) | 08a | - |
+| extra08c | LLMResponseJudgment の移行 | [extra08c-response-judgment.md](./extra08c-response-judgment.md) | 08b | - |
+| extra08d | LLMMemorySummarizer の移行 | [extra08d-memory-summarizer.md](./extra08d-memory-summarizer.md) | 08b | - |
+| extra08e | LiteLLMResponseGenerator の移行 | [extra08e-response-generator.md](./extra08e-response-generator.md) | 08b | - |
+| extra08f | LiteLLM 直接使用コードの削除 | [extra08f-cleanup.md](./extra08f-cleanup.md) | 08c, 08d, 08e | - |
 
 ### エクストラタスク概要
 
@@ -508,6 +515,26 @@ Jinja2 テンプレートを使用してシステムプロンプトを組み立�
 自律応答の待機時間にランダムなばらつき（jitter）を追加する。
 `ResponseConfig.jitter_ratio`（デフォルト: 0.2 = ±20%）で制御し、
 より人間らしい応答タイミングを実現する。
+
+#### extra08: strands-agents 移行
+
+LLM クライアントを LiteLLM 直接使用から strands-agents フレームワークに移行する。
+strands-agents は LLM オーケストレーションフレームワークで、ツール使用、
+構造化出力、コンテキスト管理など高度な機能を提供する。
+
+**サブタスク:**
+
+- **08a: 設定構造の拡張** - `AgentConfig` dataclass の追加と `Config.agents` による
+  agent 別設定のサポート。response/judgment/memory の3つを必須とする。
+- **08b: Agent ファクトリー** - strands-agents の Agent インスタンスを設定から
+  生成するファクトリークラスの実装。
+- **08c: ResponseJudgment 移行** - LLMResponseJudgment を strands-agents Agent
+  ベースに書き換え。
+- **08d: MemorySummarizer 移行** - LLMMemorySummarizer を strands-agents Agent
+  ベースに書き換え。
+- **08e: ResponseGenerator 移行** - LiteLLMResponseGenerator を strands-agents
+  Agent ベースに書き換え。
+- **08f: クリーンアップ** - LiteLLM 直接使用コードの削除、不要な依存関係の整理。
 
 ---
 

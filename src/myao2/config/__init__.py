@@ -8,10 +8,11 @@ from myao2.config.loader import (
     load_config,
 )
 from myao2.config.models import (
+    AgentConfig,
     Config,
     JudgmentSkipConfig,
     JudgmentSkipThreshold,
-    LLMConfig,
+    LLMConfig,  # 後方互換性用（extra08f で削除予定）
     LoggingConfig,
     MemoryConfig,
     PersonaConfig,
@@ -21,13 +22,14 @@ from myao2.config.models import (
 )
 
 __all__ = [
+    "AgentConfig",
     "Config",
     "ConfigError",
     "ConfigValidationError",
     "EnvironmentVariableError",
     "JudgmentSkipConfig",
     "JudgmentSkipThreshold",
-    "LLMConfig",
+    "LLMConfig",  # 後方互換性用（extra08f で削除予定）
     "LoggingConfig",
     "MemoryConfig",
     "PersonaConfig",

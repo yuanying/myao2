@@ -8,10 +8,10 @@ from typing import Any
 import yaml
 
 from myao2.config.models import (
+    AgentConfig,
     Config,
     JudgmentSkipConfig,
     JudgmentSkipThreshold,
-    LLMConfig,
     LoggingConfig,
     MemoryConfig,
     PersonaConfig,
@@ -131,7 +131,7 @@ def load_config(path: str | Path) -> Config:
 
     # 必須セクションの検証
     slack_data = _validate_required_field(data, "slack")
-    llm_data = _validate_required_field(data, "llm")
+    agents_data = _validate_required_field(data, "agents")
     persona_data = _validate_required_field(data, "persona")
 
     # SlackConfig
@@ -140,15 +140,17 @@ def load_config(path: str | Path) -> Config:
         app_token=_validate_required_field(slack_data, "app_token", "slack"),
     )
 
-    # LLMConfig (defaultは必須)
-    _validate_required_field(llm_data, "default", "llm")
-    llm: dict[str, LLMConfig] = {}
-    for key, llm_item in llm_data.items():
-        model = _validate_required_field(llm_item, "model", f"llm.{key}")
-        llm[key] = LLMConfig(
-            model=model,
-            temperature=llm_item.get("temperature", 0.7),
-            max_tokens=llm_item.get("max_tokens", 1000),
+    # AgentConfig (response, judgment, memory は必須)
+    _validate_required_field(agents_data, "response", "agents")
+    _validate_required_field(agents_data, "judgment", "agents")
+    _validate_required_field(agents_data, "memory", "agents")
+    agents: dict[str, AgentConfig] = {}
+    for key, agent_item in agents_data.items():
+        model_id = _validate_required_field(agent_item, "model_id", f"agents.{key}")
+        agents[key] = AgentConfig(
+            model_id=model_id,
+            params=agent_item.get("params", {}),
+            client_args=agent_item.get("client_args", {}),
         )
 
     # PersonaConfig
@@ -173,7 +175,6 @@ def load_config(path: str | Path) -> Config:
         short_term_summary_max_tokens=memory_data.get(
             "short_term_summary_max_tokens", 300
         ),
-        memory_generation_llm=memory_data.get("memory_generation_llm", "default"),
     )
 
     # ResponseConfig (optional, defaults used if not present)
@@ -237,7 +238,7 @@ def load_config(path: str | Path) -> Config:
 
     return Config(
         slack=slack,
-        llm=llm,
+        agents=agents,
         persona=persona,
         memory=memory,
         response=response,

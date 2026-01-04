@@ -1,6 +1,7 @@
 """設定データクラス"""
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -12,8 +13,28 @@ class SlackConfig:
 
 
 @dataclass
+class AgentConfig:
+    """strands-agents用設定
+
+    Attributes:
+        model_id: LiteLLMのモデルID（例: "openai/gpt-4o"）
+        params: LLMパラメーター（temperature, max_tokens等）
+        client_args: LiteLLMクライアント引数（api_key, api_base等）
+    """
+
+    model_id: str
+    params: dict[str, Any] = field(default_factory=dict)
+    client_args: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class LLMConfig:
-    """LLM設定（LiteLLMのcompletionに渡すdict）"""
+    """LLM設定（後方互換性用、extra08f で削除予定）
+
+    Note:
+        このクラスは後方互換性のために維持されています。
+        新規コードでは AgentConfig を使用してください。
+    """
 
     model: str
     temperature: float = 0.7
@@ -37,7 +58,8 @@ class MemoryConfig:
     short_term_window_hours: int = 24
     long_term_summary_max_tokens: int = 500
     short_term_summary_max_tokens: int = 300
-    memory_generation_llm: str = "default"
+    # 後方互換性用（extra08f で削除予定）
+    memory_generation_llm: str = "memory"
 
 
 @dataclass
@@ -112,8 +134,44 @@ class Config:
     """アプリケーション設定"""
 
     slack: SlackConfig
-    llm: dict[str, LLMConfig]
+    agents: dict[str, AgentConfig]
     persona: PersonaConfig
     memory: MemoryConfig
     response: ResponseConfig
     logging: LoggingConfig | None = None
+    # 後方互換性用（extra08f で削除予定）
+    _llm_compat: dict[str, LLMConfig] | None = field(default=None, repr=False)
+
+    def __init__(
+        self,
+        slack: SlackConfig,
+        persona: PersonaConfig,
+        memory: MemoryConfig,
+        response: ResponseConfig,
+        agents: dict[str, AgentConfig] | None = None,
+        logging: LoggingConfig | None = None,
+        *,
+        llm: dict[str, LLMConfig] | None = None,  # 後方互換性用（extra08f で削除予定）
+    ) -> None:
+        self.slack = slack
+        self.persona = persona
+        self.memory = memory
+        self.response = response
+        self.logging = logging
+        # llm= が指定された場合は _llm_compat に保存し、agents としても使用
+        if llm is not None:
+            self._llm_compat = llm
+            self.agents = llm  # type: ignore[assignment]
+        elif agents is not None:
+            self._llm_compat = None
+            self.agents = agents
+        else:
+            self._llm_compat = None
+            self.agents = {}
+
+    @property
+    def llm(self) -> dict[str, LLMConfig]:
+        """後方互換性用プロパティ（extra08f で削除予定）"""
+        if self._llm_compat is not None:
+            return self._llm_compat
+        return self.agents  # type: ignore[return-value]
