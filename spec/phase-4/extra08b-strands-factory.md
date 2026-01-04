@@ -1,8 +1,8 @@
-# extra08b: StrandsAgentFactory の実装
+# extra08b: create_model ファクトリー関数の実装
 
 ## 目的
 
-strands-agents の LiteLLMModel を生成するファクトリークラスを実装する。
+strands-agents の LiteLLMModel を生成するファクトリー関数を実装する。
 例外マッピングユーティリティも併せて実装する。
 
 ---
@@ -24,7 +24,7 @@ strands-agents の LiteLLMModel を生成するファクトリークラスを実
 
 ### 解決方針
 
-- StrandsAgentFactory で LiteLLMModel の生成を集約
+- `create_model` ファクトリー関数で LiteLLMModel の生成を集約
 - Agent は各 Generator/Judgment/Summarizer で直接生成（system_prompt が動的なため）
 - 例外マッピングユーティリティで strands-agents 例外をドメイン例外に変換
 
@@ -53,7 +53,7 @@ src/myao2/infrastructure/llm/strands/
 └── exceptions.py
 ```
 
-### StrandsAgentFactory
+### create_model ファクトリー関数
 
 ```python
 from strands.models.litellm import LiteLLMModel
@@ -61,23 +61,20 @@ from strands.models.litellm import LiteLLMModel
 from myao2.config.models import AgentConfig
 
 
-class StrandsAgentFactory:
-    """strands-agents の LiteLLMModel を生成するファクトリー"""
+def create_model(config: AgentConfig) -> LiteLLMModel:
+    """AgentConfig から LiteLLMModel を生成
 
-    def create_model(self, config: AgentConfig) -> LiteLLMModel:
-        """AgentConfig から LiteLLMModel を生成
+    Args:
+        config: Agent設定
 
-        Args:
-            config: Agent設定
-
-        Returns:
-            LiteLLMModel インスタンス
-        """
-        return LiteLLMModel(
-            model_id=config.model_id,
-            params=config.params,
-            client_args=config.client_args,
-        )
+    Returns:
+        LiteLLMModel インスタンス
+    """
+    return LiteLLMModel(
+        model_id=config.model_id,
+        params=config.params,
+        client_args=config.client_args,
+    )
 ```
 
 ### 例外マッピングユーティリティ
@@ -117,10 +114,10 @@ def map_strands_exception(e: Exception) -> LLMError:
 
 ```python
 from myao2.infrastructure.llm.strands.exceptions import map_strands_exception
-from myao2.infrastructure.llm.strands.factory import StrandsAgentFactory
+from myao2.infrastructure.llm.strands.factory import create_model
 
 __all__ = [
-    "StrandsAgentFactory",
+    "create_model",
     "map_strands_exception",
 ]
 ```
@@ -133,10 +130,7 @@ __all__ = [
 from strands import Agent
 
 from myao2.config.models import AgentConfig
-from myao2.infrastructure.llm.strands import StrandsAgentFactory, map_strands_exception
-
-# ファクトリーの使用
-factory = StrandsAgentFactory()
+from myao2.infrastructure.llm.strands import create_model, map_strands_exception
 
 # Model の生成（起動時に1回）
 config = AgentConfig(
@@ -144,7 +138,7 @@ config = AgentConfig(
     params={"temperature": 0.7, "max_tokens": 1000},
     client_args={"api_key": "sk-..."},
 )
-model = factory.create_model(config)
+model = create_model(config)
 
 # Agent の生成（リクエストごと、各 Generator で直接生成）
 agent = Agent(
@@ -163,7 +157,7 @@ except Exception as e:
 
 ## テストケース
 
-### StrandsAgentFactory
+### create_model
 
 | テスト | シナリオ | 期待結果 |
 |--------|---------|---------|
@@ -184,7 +178,7 @@ except Exception as e:
 ## 完了基準
 
 - [x] `strands/` ディレクトリが作成されている
-- [x] StrandsAgentFactory が実装されている
-- [x] create_model メソッドが AgentConfig から LiteLLMModel を生成できる
+- [x] `create_model` ファクトリー関数が実装されている
+- [x] `create_model` が AgentConfig から LiteLLMModel を生成できる
 - [x] 例外マッピングユーティリティが実装されている
 - [x] 全テストが通過する
