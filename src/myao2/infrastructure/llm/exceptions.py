@@ -11,3 +11,11 @@ class LLMRateLimitError(LLMError):
 
 class LLMAuthenticationError(LLMError):
     """Authentication error (invalid API key, etc.)."""
+
+
+class LLMTimeoutError(LLMError):
+    """Timeout error (request took too long)."""
+
+
+class LLMModelNotFoundError(LLMError):
+    """Model not found error (invalid or unsupported model)."""

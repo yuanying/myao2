@@ -207,9 +207,9 @@ except Exception as e:
 
 ## 完了基準
 
-- [ ] `strands/` ディレクトリが作成されている
-- [ ] StrandsAgentFactory が実装されている
-- [ ] create_model メソッドが AgentConfig から LiteLLMModel を生成できる
-- [ ] create_agent メソッドが Agent を生成できる
-- [ ] 例外マッピングユーティリティが実装されている
-- [ ] 全テストが通過する
+- [x] `strands/` ディレクトリが作成されている
+- [x] StrandsAgentFactory が実装されている
+- [x] create_model メソッドが AgentConfig から LiteLLMModel を生成できる
+- [x] create_agent メソッドが Agent を生成できる
+- [x] 例外マッピングユーティリティが実装されている
+- [x] 全テストが通過する
