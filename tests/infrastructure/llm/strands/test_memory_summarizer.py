@@ -431,7 +431,7 @@ class TestStrandsMemorySummarizer:
 
 
 class TestBuildSystemPrompt:
-    """Tests for StrandsMemorySummarizer._build_system_prompt method."""
+    """Tests for StrandsMemorySummarizer.build_system_prompt method."""
 
     def test_includes_persona_system_prompt(
         self,
@@ -439,7 +439,7 @@ class TestBuildSystemPrompt:
         sample_context: Context,
     ) -> None:
         """Test that system prompt contains persona's system prompt."""
-        result = summarizer._build_system_prompt(
+        result = summarizer.build_system_prompt(
             sample_context, MemoryScope.THREAD, MemoryType.SHORT_TERM
         )
 
@@ -462,7 +462,7 @@ class TestBuildSystemPrompt:
             agent_config=agent_config,
         )
 
-        result = summarizer._build_system_prompt(
+        result = summarizer.build_system_prompt(
             sample_context, MemoryScope.THREAD, MemoryType.SHORT_TERM
         )
 
@@ -475,7 +475,7 @@ class TestBuildSystemPrompt:
         sample_context: Context,
     ) -> None:
         """Test system prompt includes long-term memory guidelines."""
-        result = summarizer._build_system_prompt(
+        result = summarizer.build_system_prompt(
             sample_context, MemoryScope.CHANNEL, MemoryType.LONG_TERM
         )
 
@@ -487,7 +487,7 @@ class TestBuildSystemPrompt:
         sample_context: Context,
     ) -> None:
         """Test system prompt includes short-term memory guidelines."""
-        result = summarizer._build_system_prompt(
+        result = summarizer.build_system_prompt(
             sample_context, MemoryScope.CHANNEL, MemoryType.SHORT_TERM
         )
 
@@ -499,7 +499,7 @@ class TestBuildSystemPrompt:
         sample_context: Context,
     ) -> None:
         """Test system prompt includes thread scope guidelines."""
-        result = summarizer._build_system_prompt(
+        result = summarizer.build_system_prompt(
             sample_context, MemoryScope.THREAD, MemoryType.SHORT_TERM
         )
 
@@ -511,7 +511,7 @@ class TestBuildSystemPrompt:
         sample_context: Context,
     ) -> None:
         """Test system prompt includes channel scope guidelines."""
-        result = summarizer._build_system_prompt(
+        result = summarizer.build_system_prompt(
             sample_context, MemoryScope.CHANNEL, MemoryType.SHORT_TERM
         )
 
@@ -523,7 +523,7 @@ class TestBuildSystemPrompt:
         sample_context: Context,
     ) -> None:
         """Test system prompt includes workspace scope guidelines."""
-        result = summarizer._build_system_prompt(
+        result = summarizer.build_system_prompt(
             sample_context, MemoryScope.WORKSPACE, MemoryType.SHORT_TERM
         )
 
@@ -535,7 +535,7 @@ class TestBuildSystemPrompt:
         sample_context: Context,
     ) -> None:
         """Test system prompt includes basic summarization rules."""
-        result = summarizer._build_system_prompt(
+        result = summarizer.build_system_prompt(
             sample_context, MemoryScope.THREAD, MemoryType.SHORT_TERM
         )
 
@@ -544,7 +544,7 @@ class TestBuildSystemPrompt:
 
 
 class TestBuildQueryPrompt:
-    """Tests for StrandsMemorySummarizer._build_query_prompt method."""
+    """Tests for StrandsMemorySummarizer.build_query_prompt method."""
 
     def test_thread_scope_query(
         self,
@@ -578,7 +578,7 @@ class TestBuildQueryPrompt:
             target_thread_ts=thread_ts,
         )
 
-        result = summarizer._build_query_prompt(
+        result = summarizer.build_query_prompt(
             context, MemoryScope.THREAD, MemoryType.SHORT_TERM, None
         )
 
@@ -616,7 +616,7 @@ class TestBuildQueryPrompt:
             conversation_history=channel_messages,
         )
 
-        result = summarizer._build_query_prompt(
+        result = summarizer.build_query_prompt(
             context, MemoryScope.CHANNEL, MemoryType.SHORT_TERM, None
         )
 
@@ -649,7 +649,7 @@ class TestBuildQueryPrompt:
             channel_memories=channel_memories,
         )
 
-        result = summarizer._build_query_prompt(
+        result = summarizer.build_query_prompt(
             context,
             MemoryScope.CHANNEL,
             MemoryType.LONG_TERM,
@@ -692,7 +692,7 @@ class TestBuildQueryPrompt:
             channel_memories=channel_memories,
         )
 
-        result = summarizer._build_query_prompt(
+        result = summarizer.build_query_prompt(
             context, MemoryScope.WORKSPACE, MemoryType.SHORT_TERM, None
         )
 
@@ -727,7 +727,7 @@ class TestBuildQueryPrompt:
             channel_memories=channel_memories,
         )
 
-        result = summarizer._build_query_prompt(
+        result = summarizer.build_query_prompt(
             context,
             MemoryScope.WORKSPACE,
             MemoryType.LONG_TERM,
@@ -782,7 +782,7 @@ class TestBuildQueryPrompt:
             channel_memories=channel_memories,
         )
 
-        result = summarizer._build_query_prompt(
+        result = summarizer.build_query_prompt(
             context, MemoryScope.THREAD, MemoryType.SHORT_TERM, None
         )
 
