@@ -77,13 +77,13 @@ strands-agents の Agent が直接 LLM 呼び出しを行うため不要にな�
 
 ## 完了基準
 
-- [ ] `LLMConfig` クラスが削除されている
-- [ ] `Config.llm` プロパティが削除されている
-- [ ] `Config._llm_compat` フィールドが削除されている
-- [ ] `Config.__init__` の `llm=` パラメーターが削除されている
-- [ ] `MemoryConfig.memory_generation_llm` が削除されている
-- [ ] `LLMClient` クラスが削除されている
-- [ ] 全テストが `agents` 形式のみを使用している
-- [ ] 全テストが通過する
-- [ ] ruff check が通過する
-- [ ] ty check が通過する
+- [x] `LLMConfig` クラスが削除されている
+- [x] `Config.llm` プロパティが削除されている
+- [x] `Config._llm_compat` フィールドが削除されている
+- [x] `Config.__init__` の `llm=` パラメーターが削除されている
+- [x] `MemoryConfig.memory_generation_llm` が削除されている
+- [x] `LLMClient` クラスが削除されている
+- [x] 全テストが `agents` 形式のみを使用している
+- [x] 全テストが通過する
+- [x] ruff check が通過する
+- [x] ty check が通過する
