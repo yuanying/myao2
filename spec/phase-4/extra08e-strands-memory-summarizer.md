@@ -419,10 +419,10 @@ class StrandsMemorySummarizer:
 
 ## 完了基準
 
-- [ ] StrandsMemorySummarizer が MemorySummarizer Protocol を実装している
-- [ ] memory_system.j2 が作成されている
-- [ ] memory_query.j2 が作成されている
-- [ ] scope/memory_type に応じた適切なプロンプトが生成される
-- [ ] Model は保持され、Agent はリクエストごとに生成される
-- [ ] 例外が map_strands_exception で変換される
-- [ ] 全テストが通過する
+- [x] StrandsMemorySummarizer が MemorySummarizer Protocol を実装している
+- [x] memory_system.j2 が作成されている
+- [x] memory_query.j2 が作成されている
+- [x] scope/memory_type に応じた適切なプロンプトが生成される
+- [x] Model は保持され、Agent はリクエストごとに生成される
+- [x] 例外が map_strands_exception で変換される
+- [x] 全テストが通過する
