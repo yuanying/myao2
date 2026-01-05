@@ -11,10 +11,10 @@ from myao2.application.use_cases.autonomous_response import (
     calculate_wait_with_jitter,
 )
 from myao2.config import (
+    AgentConfig,
     Config,
     JudgmentSkipConfig,
     JudgmentSkipThreshold,
-    LLMConfig,
     MemoryConfig,
     PersonaConfig,
     ResponseConfig,
@@ -122,7 +122,11 @@ def config() -> Config:
     """Create test config."""
     return Config(
         slack=SlackConfig(bot_token="xoxb-test", app_token="xapp-test"),
-        llm={"default": LLMConfig(model="gpt-4")},
+        agents={
+            "response": AgentConfig(model_id="openai/gpt-4"),
+            "judgment": AgentConfig(model_id="openai/gpt-4"),
+            "memory": AgentConfig(model_id="openai/gpt-4"),
+        },
         persona=PersonaConfig(name="TestBot", system_prompt="You are a friendly bot."),
         memory=MemoryConfig(database_path=":memory:"),
         response=ResponseConfig(
@@ -599,7 +603,11 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         """Create test config with judgment skip enabled."""
         return Config(
             slack=SlackConfig(bot_token="xoxb-test", app_token="xapp-test"),
-            llm={"default": LLMConfig(model="gpt-4")},
+            agents={
+                "response": AgentConfig(model_id="openai/gpt-4"),
+                "judgment": AgentConfig(model_id="openai/gpt-4"),
+                "memory": AgentConfig(model_id="openai/gpt-4"),
+            },
             persona=PersonaConfig(
                 name="TestBot", system_prompt="You are a friendly bot."
             ),
@@ -624,7 +632,11 @@ class TestAutonomousResponseUseCaseJudgmentSkip:
         """Create test config with judgment skip disabled."""
         return Config(
             slack=SlackConfig(bot_token="xoxb-test", app_token="xapp-test"),
-            llm={"default": LLMConfig(model="gpt-4")},
+            agents={
+                "response": AgentConfig(model_id="openai/gpt-4"),
+                "judgment": AgentConfig(model_id="openai/gpt-4"),
+                "memory": AgentConfig(model_id="openai/gpt-4"),
+            },
             persona=PersonaConfig(
                 name="TestBot", system_prompt="You are a friendly bot."
             ),
@@ -1193,7 +1205,11 @@ class TestAutonomousResponseUseCaseJitter:
         """Create test config with jitter enabled."""
         return Config(
             slack=SlackConfig(bot_token="xoxb-test", app_token="xapp-test"),
-            llm={"default": LLMConfig(model="gpt-4")},
+            agents={
+                "response": AgentConfig(model_id="openai/gpt-4"),
+                "judgment": AgentConfig(model_id="openai/gpt-4"),
+                "memory": AgentConfig(model_id="openai/gpt-4"),
+            },
             persona=PersonaConfig(
                 name="TestBot", system_prompt="You are a friendly bot."
             ),
