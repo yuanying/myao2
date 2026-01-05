@@ -12,7 +12,6 @@ from myao2.config.models import (
     Config,
     JudgmentSkipConfig,
     JudgmentSkipThreshold,
-    LLMConfig,  # 後方互換性用（extra08f で削除予定）
     LoggingConfig,
     MemoryConfig,
     PersonaConfig,
@@ -29,7 +28,6 @@ __all__ = [
     "EnvironmentVariableError",
     "JudgmentSkipConfig",
     "JudgmentSkipThreshold",
-    "LLMConfig",  # 後方互換性用（extra08f で削除予定）
     "LoggingConfig",
     "MemoryConfig",
     "PersonaConfig",

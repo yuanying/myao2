@@ -60,8 +60,8 @@ class StrandsMemorySummarizer:
         if not self._has_content_to_summarize(context, scope, memory_type):
             return existing_memory or ""
 
-        system_prompt = self._build_system_prompt(context, scope, memory_type)
-        query_prompt = self._build_query_prompt(
+        system_prompt = self.build_system_prompt(context, scope, memory_type)
+        query_prompt = self.build_query_prompt(
             context, scope, memory_type, existing_memory
         )
 
@@ -74,7 +74,7 @@ class StrandsMemorySummarizer:
         except Exception as e:
             raise map_strands_exception(e)
 
-    def _build_system_prompt(
+    def build_system_prompt(
         self,
         context: Context,
         scope: MemoryScope,
@@ -100,7 +100,7 @@ class StrandsMemorySummarizer:
             memory_type=memory_type.value,
         )
 
-    def _build_query_prompt(
+    def build_query_prompt(
         self,
         context: Context,
         scope: MemoryScope,

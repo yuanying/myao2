@@ -205,7 +205,8 @@ dependencies = [
 - [x] 08c: StrandsResponseGenerator が実装されている
 - [x] 08d: StrandsResponseJudgment が Structured Output で実装されている
 - [x] 08e: StrandsMemorySummarizer が実装されている
-- [ ] 08f: エントリポイントが新実装に切り替わっている
-- [ ] 08f: 旧実装ファイルが全て削除されている
-- [ ] 全テストが通過する
-- [ ] アプリケーションが正常に起動・動作する
+- [x] 08f: エントリポイントが新実装に切り替わっている
+- [x] 08f: 旧実装ファイルが全て削除されている
+- [x] 全テストが通過する
+
+Note: 08b で仕様に記載されていた StrandsAgentFactory クラスは create_model() 関数として実装されている

@@ -11,12 +11,12 @@ from myao2.application.services.background_memory import BackgroundMemoryGenerat
 from myao2.application.use_cases import AutonomousResponseUseCase, ReplyToMentionUseCase
 from myao2.application.use_cases.generate_memory import GenerateMemoryUseCase
 from myao2.config import ConfigError, LoggingConfig, load_config
-from myao2.infrastructure.llm import (
-    LiteLLMResponseGenerator,
-    LLMClient,
-    LLMResponseJudgment,
+from myao2.infrastructure.llm.strands import (
+    StrandsMemorySummarizer,
+    StrandsResponseGenerator,
+    StrandsResponseJudgment,
+    create_model,
 )
-from myao2.infrastructure.llm.memory_summarizer import LLMMemorySummarizer
 from myao2.infrastructure.persistence import (
     DatabaseManager,
     DBChannelMonitor,
@@ -115,15 +115,24 @@ async def main() -> None:
         channel_repository=channel_repository,
     )
 
-    # Use default LLM config
-    if "default" not in config.llm:
-        logger.error("No 'default' LLM config found")
+    # Validate agents config
+    if "response" not in config.agents:
+        logger.error("No 'response' agent config found")
+        sys.exit(1)
+    if "judgment" not in config.agents:
+        logger.error("No 'judgment' agent config found")
+        sys.exit(1)
+    if "memory" not in config.agents:
+        logger.error("No 'memory' agent config found")
         sys.exit(1)
 
-    llm_config = config.llm["default"]
-    debug_llm_messages = bool(config.logging and config.logging.debug_llm_messages)
-    llm_client = LLMClient(llm_config, debug_llm_messages=debug_llm_messages)
-    response_generator = LiteLLMResponseGenerator(llm_client)
+    # Create models (once at startup, reused across requests)
+    response_model = create_model(config.agents["response"])
+    judgment_model = create_model(config.agents["judgment"])
+    memory_model = create_model(config.agents["memory"])
+
+    # Create components
+    response_generator = StrandsResponseGenerator(response_model)
 
     # Initialize use case for mention replies
     reply_use_case = ReplyToMentionUseCase(
@@ -153,12 +162,7 @@ async def main() -> None:
     await channel_initializer.sync_channels()
 
     # Initialize autonomous response components
-    # Use judgment LLM config if available, otherwise use default
-    judgment_llm_config = config.llm.get("judgment", config.llm["default"])
-    judgment_llm_client = LLMClient(
-        judgment_llm_config, debug_llm_messages=debug_llm_messages
-    )
-    response_judgment = LLMResponseJudgment(client=judgment_llm_client)
+    response_judgment = StrandsResponseJudgment(judgment_model)
 
     channel_monitor = DBChannelMonitor(
         message_repository=message_repository,
@@ -188,15 +192,8 @@ async def main() -> None:
     )
 
     # Initialize memory generation components
-    memory_llm_config = config.llm.get(
-        config.memory.memory_generation_llm,
-        config.llm["default"],
-    )
-    memory_llm_client = LLMClient(
-        memory_llm_config, debug_llm_messages=debug_llm_messages
-    )
-    memory_summarizer = LLMMemorySummarizer(
-        client=memory_llm_client,
+    memory_summarizer = StrandsMemorySummarizer(
+        model=memory_model,
         config=config.memory,
     )
 

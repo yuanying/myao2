@@ -57,12 +57,12 @@ from myao2.application.use_cases.helpers import (  # noqa: E402
 )
 from myao2.config.loader import load_config  # noqa: E402
 from myao2.domain.entities.memory import MemoryScope, MemoryType  # noqa: E402
-from myao2.infrastructure.llm import LLMClient  # noqa: E402
-from myao2.infrastructure.llm.memory_summarizer import LLMMemorySummarizer  # noqa: E402
-from myao2.infrastructure.llm.response_generator import (  # noqa: E402
-    LiteLLMResponseGenerator,
+from myao2.infrastructure.llm.strands import (  # noqa: E402
+    StrandsMemorySummarizer,
+    StrandsResponseGenerator,
+    StrandsResponseJudgment,
+    create_model,
 )
-from myao2.infrastructure.llm.response_judgment import LLMResponseJudgment  # noqa: E402
 from myao2.infrastructure.persistence import (  # noqa: E402
     DatabaseManager,
     SQLiteChannelRepository,
@@ -166,14 +166,15 @@ async def run_generate(
         target_thread_ts=args.thread,
     )
 
-    # LLMクライアント初期化
-    llm_config = config.llm["default"]
-    llm_client = LLMClient(llm_config)
-    generator = LiteLLMResponseGenerator(llm_client)
+    # Create model and generator
+    response_model = create_model(config.agents["response"])
+    generator = StrandsResponseGenerator(response_model)
 
     # プロンプト構築
     system_prompt = generator.build_system_prompt(context)
+    query_prompt = generator.build_query_prompt(context)
     print_prompt("Response Generator System Prompt", system_prompt)
+    print_prompt("Response Generator Query Prompt", query_prompt)
 
     if not args.dry_run:
         print("Calling LLM...")
@@ -210,14 +211,15 @@ async def run_judgment(
         target_thread_ts=args.thread,
     )
 
-    # LLMクライアント初期化
-    judgment_llm_config = config.llm.get("judgment", config.llm["default"])
-    llm_client = LLMClient(judgment_llm_config)
-    judgment = LLMResponseJudgment(client=llm_client)
+    # Create model and judgment
+    judgment_model = create_model(config.agents["judgment"])
+    judgment = StrandsResponseJudgment(judgment_model)
 
     # プロンプト構築
     system_prompt = judgment.build_system_prompt(context)
+    query_prompt = judgment.build_query_prompt(context)
     print_prompt("Response Judgment System Prompt", system_prompt)
+    print_prompt("Response Judgment Query Prompt", query_prompt)
 
     if not args.dry_run:
         print("Calling LLM...")
@@ -301,19 +303,17 @@ async def run_summarize(
             )
             existing_memory = mem.content if mem else None
 
-    # LLMクライアント初期化
-    memory_llm_config = config.llm.get(
-        config.memory.memory_generation_llm,
-        config.llm["default"],
-    )
-    llm_client = LLMClient(memory_llm_config)
-    summarizer = LLMMemorySummarizer(client=llm_client, config=config.memory)
+    # Create model and summarizer
+    memory_model = create_model(config.agents["memory"])
+    summarizer = StrandsMemorySummarizer(model=memory_model, config=config.memory)
 
     # プロンプト構築
-    system_prompt = summarizer.build_system_prompt(
+    system_prompt = summarizer.build_system_prompt(context, scope, memory_type)
+    query_prompt = summarizer.build_query_prompt(
         context, scope, memory_type, existing_memory
     )
     print_prompt("Memory Summarizer System Prompt", system_prompt)
+    print_prompt("Memory Summarizer Query Prompt", query_prompt)
 
     if not args.dry_run:
         print("Calling LLM...")

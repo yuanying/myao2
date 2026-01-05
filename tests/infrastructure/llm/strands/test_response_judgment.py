@@ -189,7 +189,7 @@ class TestStrandsResponseJudgment:
 
 
 class TestBuildSystemPrompt:
-    """Tests for StrandsResponseJudgment._build_system_prompt method."""
+    """Tests for StrandsResponseJudgment.build_system_prompt method."""
 
     def test_build_system_prompt_with_persona(
         self,
@@ -197,7 +197,7 @@ class TestBuildSystemPrompt:
         sample_context: Context,
     ) -> None:
         """Test that system prompt contains persona's system prompt."""
-        result = judgment._build_system_prompt(sample_context)
+        result = judgment.build_system_prompt(sample_context)
 
         assert "You are a friendly bot." in result
         # Should contain judgment criteria
@@ -221,7 +221,7 @@ class TestBuildSystemPrompt:
             ),
         )
 
-        result = judgment._build_system_prompt(context)
+        result = judgment.build_system_prompt(context)
 
         assert "You are a helpful assistant." in result
         assert "判断基準" in result
@@ -241,7 +241,7 @@ class TestBuildSystemPrompt:
             agent_config=agent_config,
         )
 
-        result = judgment._build_system_prompt(sample_context)
+        result = judgment.build_system_prompt(sample_context)
 
         # Should include both persona and agent system prompts
         assert "You are a friendly bot." in result
@@ -262,14 +262,14 @@ class TestBuildSystemPrompt:
             agent_config=agent_config,
         )
 
-        result = judgment._build_system_prompt(sample_context)
+        result = judgment.build_system_prompt(sample_context)
 
         # Should only include persona system prompt
         assert "You are a friendly bot." in result
 
 
 class TestBuildQueryPrompt:
-    """Tests for StrandsResponseJudgment._build_query_prompt method."""
+    """Tests for StrandsResponseJudgment.build_query_prompt method."""
 
     def test_build_query_prompt_without_memories(
         self,
@@ -287,7 +287,7 @@ class TestBuildQueryPrompt:
             conversation_history=channel_messages,
         )
 
-        result = judgment._build_query_prompt(context)
+        result = judgment.build_query_prompt(context)
 
         # Should NOT include memory section when no memories
         assert "## 記憶" not in result
@@ -313,7 +313,7 @@ class TestBuildQueryPrompt:
             workspace_short_term_memory="Workspace recent content.",
         )
 
-        result = judgment._build_query_prompt(context)
+        result = judgment.build_query_prompt(context)
 
         # Should include memory section
         assert "## 記憶" in result
@@ -353,7 +353,7 @@ class TestBuildQueryPrompt:
             channel_memories=channel_memories,
         )
 
-        result = judgment._build_query_prompt(context)
+        result = judgment.build_query_prompt(context)
 
         # Should include channel info section
         assert "## チャンネル情報" in result
@@ -384,7 +384,7 @@ class TestBuildQueryPrompt:
             conversation_history=channel_messages,
         )
 
-        result = judgment._build_query_prompt(context)
+        result = judgment.build_query_prompt(context)
 
         assert "現在時刻:" in result
         # Should contain UTC time format
@@ -421,7 +421,7 @@ class TestBuildQueryPrompt:
             target_thread_ts=None,
         )
 
-        result = judgment._build_query_prompt(context)
+        result = judgment.build_query_prompt(context)
 
         # Should include top-level judgment section
         assert "## 判定対象: トップレベル会話" in result
@@ -474,7 +474,7 @@ class TestBuildQueryPrompt:
             target_thread_ts="1234567890.000001",
         )
 
-        result = judgment._build_query_prompt(context)
+        result = judgment.build_query_prompt(context)
 
         # Should include thread judgment section
         assert "## 判定対象スレッド: 1234567890.000001" in result

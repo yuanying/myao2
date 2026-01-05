@@ -49,8 +49,8 @@ class StrandsResponseJudgment:
         Returns:
             JudgmentResult with should_respond, reason, and confidence.
         """
-        system_prompt = self._build_system_prompt(context)
-        query_prompt = self._build_query_prompt(context)
+        system_prompt = self.build_system_prompt(context)
+        query_prompt = self.build_query_prompt(context)
 
         # Create Agent per request since system_prompt is dynamic
         agent = Agent(model=self._model, system_prompt=system_prompt)
@@ -75,7 +75,7 @@ class StrandsResponseJudgment:
         except Exception as e:
             raise map_strands_exception(e)
 
-    def _build_system_prompt(self, context: Context) -> str:
+    def build_system_prompt(self, context: Context) -> str:
         """Build system prompt (fixed part).
 
         Args:
@@ -92,7 +92,7 @@ class StrandsResponseJudgment:
             agent_system_prompt=agent_system_prompt,
         )
 
-    def _build_query_prompt(self, context: Context) -> str:
+    def build_query_prompt(self, context: Context) -> str:
         """Build query prompt (dynamic part).
 
         Args:
