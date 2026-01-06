@@ -5,75 +5,75 @@
     message text
 #}
 {% macro render_messages(messages) %}
-{% for msg in messages %}
+    {% for msg in messages %}
 **{{ msg.timestamp | format_timestamp }}** {{ msg.user.name }}:
 {{ msg.text }}
 
-{% endfor %}
+    {% endfor %}
 {% endmacro %}
 {% if scope == "thread" %}
 {# === THREAD SCOPE === #}
-{% if workspace_long_term_memory or workspace_short_term_memory %}
+    {% if workspace_long_term_memory or workspace_short_term_memory %}
 ## 記憶
 
-{% if workspace_long_term_memory %}
+        {% if workspace_long_term_memory %}
 ### ワークスペースの歴史
 {{ workspace_long_term_memory }}
 
-{% endif %}
-{% if workspace_short_term_memory %}
+        {% endif %}
+        {% if workspace_short_term_memory %}
 ### ワークスペースの最近の出来事
 {{ workspace_short_term_memory }}
 
-{% endif %}
-{% endif %}
-{% if channel_memories %}
+        {% endif %}
+    {% endif %}
+    {% if channel_memories %}
 ## チャンネル情報
 
 あなたが参加しているチャンネルは以下です。
 
-{% for channel in channel_memories.values() %}
+        {% for channel in channel_memories.values() %}
 - #{{ channel.channel_name }}
-{% endfor %}
+        {% endfor %}
 
 現在、あなたは #{{ current_channel_name }} にいます。
 
 ## 各チャンネルの記憶
 
-{% for channel in channel_memories.values() %}
-{% if channel.long_term_memory or channel.short_term_memory %}
+        {% for channel in channel_memories.values() %}
+            {% if channel.long_term_memory or channel.short_term_memory %}
 ### #{{ channel.channel_name }}
 
-{% if channel.long_term_memory %}
+                {% if channel.long_term_memory %}
 #### 歴史
 {{ channel.long_term_memory }}
 
-{% endif %}
-{% if channel.short_term_memory %}
+                {% endif %}
+                {% if channel.short_term_memory %}
 #### 最近の出来事
 {{ channel.short_term_memory }}
 
-{% endif %}
-{% endif %}
-{% endfor %}
-{% endif %}
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    {% endif %}
 ## 現在の会話
 
 現在は、#{{ current_channel_name }} チャンネルにいます。
 直近の会話は以下の通りです。
 
-{% if target_thread_ts and top_level_messages %}
+    {% if target_thread_ts and top_level_messages %}
 ### トップレベル
 
 {{ render_messages(top_level_messages) }}
-{% endif %}
-{% for thread_ts, thread_msgs in thread_messages.items() %}
-{% if thread_ts != target_thread_ts %}
+    {% endif %}
+    {% for thread_ts, thread_msgs in thread_messages.items() %}
+        {% if thread_ts != target_thread_ts %}
 ### スレッド: {{ thread_ts }}
 
 {{ render_messages(thread_msgs) }}
-{% endif %}
-{% endfor %}
+        {% endif %}
+    {% endfor %}
 ## 要約対象スレッド: {{ target_thread_ts }}
 
 {{ render_messages(target_thread_messages) }}
@@ -82,77 +82,77 @@
 
 {% elif scope == "channel" %}
 {# === CHANNEL SCOPE === #}
-{% if workspace_long_term_memory %}
+    {% if workspace_long_term_memory %}
 ## ワークスペースの概要
 {{ workspace_long_term_memory }}
 
-{% endif %}
-{% if memory_type == "short_term" %}
+    {% endif %}
+    {% if memory_type == "short_term" %}
 ## 要約対象: チャンネル会話履歴
 
 以下は #{{ current_channel_name }} チャンネルの直近の会話です。
 
-{% if top_level_messages %}
+        {% if top_level_messages %}
 ### トップレベル
 
 {{ render_messages(top_level_messages) }}
-{% endif %}
-{% for thread_ts, thread_msgs in thread_messages.items() %}
+        {% endif %}
+        {% for thread_ts, thread_msgs in thread_messages.items() %}
 ### スレッド: {{ thread_ts }}
 
 {{ render_messages(thread_msgs) }}
-{% endfor %}
+        {% endfor %}
 ---
 要約対象のチャンネルの会話を要約してください。
 
-{% else %}
+    {% else %}
 {# CHANNEL LONG_TERM #}
-{% if existing_memory %}
+        {% if existing_memory %}
 ## 既存のチャンネル長期記憶
 {{ existing_memory }}
 
-{% endif %}
+        {% endif %}
 ## 統合対象: チャンネルの短期記憶
 {{ channel_short_term_memory }}
 
 ---
 上記の短期記憶を既存の長期記憶に統合してください。
 
-{% endif %}
+    {% endif %}
 
 {% elif scope == "workspace" %}
 {# === WORKSPACE SCOPE === #}
-{% if memory_type == "short_term" %}
+    {% if memory_type == "short_term" %}
 ## 統合対象: 各チャンネルの短期記憶
 
-{% for channel in channel_memories.values() %}
-{% if channel.short_term_memory %}
+        {% for channel in channel_memories.values() %}
+            {% if channel.short_term_memory %}
 ### #{{ channel.channel_name }}
 {{ channel.short_term_memory }}
 
-{% endif %}
-{% endfor %}
+            {% endif %}
+        {% endfor %}
 ---
 上記の各チャンネルの短期記憶を統合し、ワークスペース全体の現在の状況を要約してください。
 
-{% else %}
+    {% else %}
 {# WORKSPACE LONG_TERM #}
 ## 統合対象
 
-{% if existing_memory %}
+        {% if existing_memory %}
 ### 既存のワークスペース長期記憶
 {{ existing_memory }}
 
-{% endif %}
-{% for channel in channel_memories.values() %}
-{% if channel.long_term_memory %}
+        {% endif %}
+        {% for channel in channel_memories.values() %}
+            {% if channel.long_term_memory %}
 ### #{{ channel.channel_name }} の長期記憶
 {{ channel.long_term_memory }}
 
-{% endif %}
-{% endfor %}
+            {% endif %}
+        {% endfor %}
 ---
 上記の全ての記憶を統合し、ワークスペース全体の長期記憶を生成してください。
 
-{% endif %}
+    {% endif %}
 {% endif %}

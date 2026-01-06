@@ -1,53 +1,53 @@
 {% macro render_messages(messages) %}
-{% for msg in messages %}
+    {% for msg in messages %}
 **{{ msg.timestamp | format_timestamp }}** {{ msg.user.name }}:
 {{ msg.text }}
 
-{% endfor %}
+    {% endfor %}
 {% endmacro %}
 {% if workspace_long_term_memory or workspace_short_term_memory %}
 ## 記憶
 
-{% if workspace_long_term_memory %}
+    {% if workspace_long_term_memory %}
 ### ワークスペースの歴史
 {{ workspace_long_term_memory }}
 
-{% endif %}
-{% if workspace_short_term_memory %}
+    {% endif %}
+    {% if workspace_short_term_memory %}
 ### ワークスペースの最近の出来事
 {{ workspace_short_term_memory }}
 
-{% endif %}
+    {% endif %}
 {% endif %}
 {% if channel_memories %}
 ## チャンネル情報
 
 あなたが参加しているチャンネルは以下です。
 
-{% for channel in channel_memories.values() %}
+    {% for channel in channel_memories.values() %}
 - #{{ channel.channel_name }}
-{% endfor %}
+    {% endfor %}
 
 現在、あなたは #{{ current_channel_name }} にいます。
 
 ## 各チャンネルの記憶
 
-{% for channel in channel_memories.values() %}
-{% if channel.long_term_memory or channel.short_term_memory %}
+    {% for channel in channel_memories.values() %}
+        {% if channel.long_term_memory or channel.short_term_memory %}
 ### #{{ channel.channel_name }}
 
-{% if channel.long_term_memory %}
+            {% if channel.long_term_memory %}
 #### 歴史
 {{ channel.long_term_memory }}
 
-{% endif %}
-{% if channel.short_term_memory %}
+            {% endif %}
+            {% if channel.short_term_memory %}
 #### 最近の出来事
 {{ channel.short_term_memory }}
 
-{% endif %}
-{% endif %}
-{% endfor %}
+            {% endif %}
+        {% endif %}
+    {% endfor %}
 {% endif %}
 ## 現在の会話
 
@@ -60,11 +60,11 @@
 {{ render_messages(top_level_messages) }}
 {% endif %}
 {% for thread_ts, thread_msgs in thread_messages.items() %}
-{% if target_thread_ts and thread_ts != target_thread_ts %}
+    {% if target_thread_ts and thread_ts != target_thread_ts %}
 ### スレッド: {{ thread_ts }}
 
 {{ render_messages(thread_msgs) }}
-{% endif %}
+    {% endif %}
 {% endfor %}
 {% if target_thread_ts %}
 ### 返信対象スレッド: {{ target_thread_ts }}
