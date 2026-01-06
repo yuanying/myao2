@@ -1,5 +1,7 @@
 # 01: メモ帳ツール - 実装手順書
 
+**Status**: ✅ Completed
+
 ## 目標
 
 LLMが自発的に重要だと思ったことを記憶に残すメモ帳ツールを実装する。
@@ -70,12 +72,12 @@ LLMが自発的に重要だと思ったことを記憶に残すメモ帳ツー�
 
 ## タスク一覧
 
-| # | タスク | 詳細設計書 | 依存 |
-|---|--------|-----------|------|
-| 01a | Memo エンティティ + MemoRepository Protocol | [01a-memo-domain.md](./01a-memo-domain.md) | - |
-| 01b | SQLiteMemoRepository + MemoModel | [01b-memo-infrastructure.md](./01b-memo-infrastructure.md) | 01a |
-| 01c | メモツール関数定義（@tool デコレータ）| [01c-memo-tools.md](./01c-memo-tools.md) | 01b |
-| 01d | ResponseGenerator統合 + プロンプトテンプレート更新 | [01d-memo-integration.md](./01d-memo-integration.md) | 01c |
+| # | タスク | 詳細設計書 | 依存 | Status |
+|---|--------|-----------|------|--------|
+| 01a | Memo エンティティ + MemoRepository Protocol | [01a-memo-domain.md](./01a-memo-domain.md) | - | ✅ |
+| 01b | SQLiteMemoRepository + MemoModel | [01b-memo-infrastructure.md](./01b-memo-infrastructure.md) | 01a | ✅ |
+| 01c | メモツール関数定義（@tool デコレータ）| [01c-memo-tools.md](./01c-memo-tools.md) | 01b | ✅ |
+| 01d | ResponseGenerator統合 + プロンプトテンプレート更新 | [01d-memo-integration.md](./01d-memo-integration.md) | 01c | ✅ |
 
 ---
 

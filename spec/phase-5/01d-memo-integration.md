@@ -1,5 +1,7 @@
 # 01d: ResponseGenerator統合 - 詳細設計書
 
+**Status**: ✅ Completed
+
 ## 概要
 
 メモツールを ResponseGenerator に統合し、プロンプトテンプレートを更新する。

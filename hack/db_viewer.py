@@ -10,6 +10,7 @@ Usage:
     uv run python hack/db_viewer.py memories [--scope SCOPE] [--type TYPE]
     uv run python hack/db_viewer.py messages [--channel CH] [--thread TH] [--limit N]
     uv run python hack/db_viewer.py judgments [--channel CHANNEL]
+    uv run python hack/db_viewer.py memos [--tag TAG] [--priority N] [--limit N]
 """
 
 import argparse
@@ -63,6 +64,7 @@ from myao2.infrastructure.persistence.database import DatabaseManager  # noqa: E
 from myao2.infrastructure.persistence.models import (  # noqa: E402
     ChannelModel,
     JudgmentCacheModel,
+    MemoModel,
     MemoryModel,
     MessageModel,
     UserModel,
@@ -137,6 +139,7 @@ class DatabaseViewer:
             ("channels", ChannelModel),
             ("users", UserModel),
             ("memories", MemoryModel),
+            ("memos", MemoModel),
             ("judgment_caches", JudgmentCacheModel),
         ]
 
@@ -281,6 +284,43 @@ class DatabaseViewer:
             for j in judgments
         ]
 
+    async def list_memos(
+        self,
+        tag: str | None = None,
+        min_priority: int | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """メモ一覧を取得"""
+        async with self._db_manager.get_session() as session:
+            stmt = select(MemoModel).order_by(
+                desc(MemoModel.priority),  # type: ignore[arg-type]
+                desc(MemoModel.updated_at),  # type: ignore[arg-type]
+            )
+
+            if min_priority is not None:
+                stmt = stmt.where(MemoModel.priority >= min_priority)
+
+            stmt = stmt.limit(limit)
+            result = await session.exec(stmt)
+            memos = list(result.all())
+
+        # タグでフィルタ（JSON配列のためPython側で処理）
+        if tag:
+            memos = [m for m in memos if m.tags and tag in m.tags]
+
+        return [
+            {
+                "id": m.id,
+                "content": m.content,
+                "detail": m.detail,
+                "priority": m.priority,
+                "tags": m.tags or [],
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+                "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+            }
+            for m in memos
+        ]
+
 
 def print_stats(stats: dict[str, int], output_format: str) -> None:
     """統計情報を出力"""
@@ -402,6 +442,42 @@ def print_judgments(judgments: list[dict[str, Any]], output_format: str) -> None
     )
 
 
+def print_memos(memos: list[dict[str, Any]], output_format: str) -> None:
+    """メモ一覧を出力"""
+    if output_format == "json":
+        print(json.dumps(memos, indent=2, ensure_ascii=False))
+        return
+
+    formatter = TableFormatter()
+    rows = [
+        [
+            m["id"][:8],
+            str(m["priority"]),
+            ", ".join(m["tags"]) if m["tags"] else "-",
+            formatter.truncate(m["content"], 50),
+            "Yes" if m["detail"] else "No",
+        ]
+        for m in memos
+    ]
+    formatter.print_table(
+        ["ID", "Pri", "Tags", "Content", "Detail"],
+        rows,
+        title="Memos",
+    )
+
+    # 詳細表示
+    if memos and output_format == "table":
+        print("\n--- Memo Details ---")
+        for i, m in enumerate(memos, 1):
+            print(f"\n[{i}] ID: {m['id'][:8]} / Priority: {m['priority']}")
+            print(f"    Tags: {', '.join(m['tags']) if m['tags'] else '-'}")
+            print(f"    Updated: {m['updated_at']}")
+            print("-" * 60)
+            print(f"Content: {m['content']}")
+            if m["detail"]:
+                print(f"Detail: {m['detail']}")
+
+
 def create_parser() -> argparse.ArgumentParser:
     """CLIパーサーを作成"""
     parser = argparse.ArgumentParser(
@@ -486,6 +562,24 @@ def create_parser() -> argparse.ArgumentParser:
         help="チャンネルIDでフィルタ",
     )
 
+    # memos
+    memos_parser = subparsers.add_parser("memos", help="メモ一覧を表示")
+    memos_parser.add_argument(
+        "--tag",
+        help="タグでフィルタ",
+    )
+    memos_parser.add_argument(
+        "--priority",
+        type=int,
+        help="指定優先度以上でフィルタ",
+    )
+    memos_parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="表示件数 (default: 20)",
+    )
+
     return parser
 
 
@@ -556,6 +650,14 @@ async def main() -> None:
         elif args.command == "judgments":
             judgments = await viewer.list_judgments(channel_id=args.channel)
             print_judgments(judgments, args.format)
+
+        elif args.command == "memos":
+            memos = await viewer.list_memos(
+                tag=args.tag,
+                min_priority=args.priority,
+                limit=args.limit,
+            )
+            print_memos(memos, args.format)
 
     finally:
         await db_manager.close()

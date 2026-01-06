@@ -17,11 +17,13 @@ from myao2.infrastructure.llm.strands import (
     StrandsResponseJudgment,
     create_model,
 )
+from myao2.infrastructure.llm.strands.memo_tools import MemoToolsFactory
 from myao2.infrastructure.persistence import (
     DatabaseManager,
     DBChannelMonitor,
     SQLiteChannelRepository,
     SQLiteJudgmentCacheRepository,
+    SQLiteMemoRepository,
     SQLiteMemoryRepository,
     SQLiteMessageRepository,
     SQLiteUserRepository,
@@ -108,6 +110,7 @@ async def main() -> None:
     user_repository = SQLiteUserRepository(db_manager.get_session)
     channel_repository = SQLiteChannelRepository(db_manager.get_session)
     memory_repository = SQLiteMemoryRepository(db_manager.get_session)
+    memo_repository = SQLiteMemoRepository(db_manager.get_session)
 
     event_adapter = SlackEventAdapter(
         client=app.client,
@@ -132,7 +135,11 @@ async def main() -> None:
     memory_model = create_model(config.agents["memory"])
 
     # Create components
-    response_generator = StrandsResponseGenerator(response_model)
+    memo_tools_factory = MemoToolsFactory(memo_repository=memo_repository)
+    response_generator = StrandsResponseGenerator(
+        response_model,
+        memo_tools_factory=memo_tools_factory,
+    )
 
     # Initialize use case for mention replies
     reply_use_case = ReplyToMentionUseCase(
@@ -143,6 +150,7 @@ async def main() -> None:
         memory_repository=memory_repository,
         persona=config.persona,
         bot_user_id=bot_user_id,
+        memo_repository=memo_repository,
     )
 
     register_handlers(
@@ -184,6 +192,7 @@ async def main() -> None:
         config=config,
         bot_user_id=bot_user_id,
         channel_sync_service=channel_initializer,
+        memo_repository=memo_repository,
     )
 
     periodic_checker = PeriodicChecker(

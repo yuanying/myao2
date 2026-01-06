@@ -10,12 +10,14 @@ from myao2.config.models import PersonaConfig
 from myao2.domain.entities import Channel, Context, Message, User
 from myao2.domain.entities.channel_messages import ChannelMemory, ChannelMessages
 from myao2.domain.entities.llm_metrics import LLMMetrics
+from myao2.domain.entities.memo import Memo
 from myao2.domain.entities.memory import (
     MemoryScope,
     MemoryType,
     make_thread_scope_id,
 )
 from myao2.domain.repositories.channel_repository import ChannelRepository
+from myao2.domain.repositories.memo_repository import MemoRepository
 from myao2.domain.repositories.memory_repository import MemoryRepository
 from myao2.domain.repositories.message_repository import MessageRepository
 
@@ -165,6 +167,7 @@ async def build_context_with_memory(
     target_thread_ts: str | None = None,
     message_limit: int = DEFAULT_MESSAGE_LIMIT,
     since: datetime | None = None,
+    memo_repository: MemoRepository | None = None,
 ) -> Context:
     """Build Context with memory from repository.
 
@@ -186,6 +189,7 @@ async def build_context_with_memory(
         target_thread_ts: Target thread timestamp (None for top-level).
         message_limit: Maximum number of messages to retrieve.
         since: Message retrieval start time (optional, for GenerateMemory).
+        memo_repository: Repository for memo access (optional).
 
     Returns:
         Context instance with messages and memories populated.
@@ -248,6 +252,12 @@ async def build_context_with_memory(
         if thread_mem:
             thread_memories[target_thread_ts] = thread_mem.content
 
+    # Retrieve memos if memo_repository is provided
+    high_priority_memos: list[Memo] = []
+    recent_memos: list[Memo] = []
+    if memo_repository:
+        high_priority_memos, recent_memos = await get_memos_for_context(memo_repository)
+
     return Context(
         persona=persona,
         conversation_history=channel_messages,
@@ -256,4 +266,33 @@ async def build_context_with_memory(
         channel_memories=channel_memories,
         thread_memories=thread_memories,
         target_thread_ts=target_thread_ts,
+        high_priority_memos=high_priority_memos,
+        recent_memos=recent_memos,
     )
+
+
+async def get_memos_for_context(
+    memo_repository: MemoRepository,
+) -> tuple[list[Memo], list[Memo]]:
+    """Context 用のメモを取得する。
+
+    高優先度メモ（優先度4以上）と直近メモを取得する。
+    直近メモは高優先度メモとの重複を除外する。
+
+    Args:
+        memo_repository: MemoRepository インスタンス
+
+    Returns:
+        (high_priority_memos, recent_memos) のタプル
+        - high_priority_memos: 優先度4以上のメモ（上限20件）
+        - recent_memos: 直近メモ（上限5件、high_priority_memosとの重複除外）
+    """
+    # 高優先度メモを取得（優先度4以上、上限20件）
+    high_priority_memos = await memo_repository.find_by_priority_gte(4, limit=20)
+    high_priority_ids = {m.id for m in high_priority_memos}
+
+    # 直近メモを取得（重複除外、上限5件）
+    all_recent = await memo_repository.find_recent(limit=5)
+    recent_memos = [m for m in all_recent if m.id not in high_priority_ids]
+
+    return high_priority_memos, recent_memos

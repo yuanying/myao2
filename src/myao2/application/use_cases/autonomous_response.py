@@ -17,6 +17,7 @@ from myao2.domain.entities.judgment_result import JudgmentResult
 from myao2.domain.exceptions import ChannelNotAccessibleError
 from myao2.domain.repositories import ChannelRepository, MessageRepository
 from myao2.domain.repositories.judgment_cache_repository import JudgmentCacheRepository
+from myao2.domain.repositories.memo_repository import MemoRepository
 from myao2.domain.repositories.memory_repository import MemoryRepository
 from myao2.domain.services import (
     ChannelSyncService,
@@ -75,6 +76,7 @@ class AutonomousResponseUseCase:
         config: Config,
         bot_user_id: str,
         channel_sync_service: ChannelSyncService | None = None,
+        memo_repository: MemoRepository | None = None,
     ) -> None:
         """Initialize the use case.
 
@@ -90,6 +92,7 @@ class AutonomousResponseUseCase:
             config: Application configuration.
             bot_user_id: The bot's user ID.
             channel_sync_service: Service for channel synchronization (optional).
+            memo_repository: Repository for memo access (optional).
         """
         self._channel_monitor = channel_monitor
         self._response_judgment = response_judgment
@@ -102,6 +105,7 @@ class AutonomousResponseUseCase:
         self._config = config
         self._bot_user_id = bot_user_id
         self._channel_sync_service = channel_sync_service
+        self._memo_repository = memo_repository
 
     async def execute(self) -> None:
         """Execute autonomous response.
@@ -185,6 +189,7 @@ class AutonomousResponseUseCase:
             persona=self._config.persona,
             target_thread_ts=thread_ts,
             message_limit=self._config.response.message_limit,
+            memo_repository=self._memo_repository,
         )
 
         # Get latest message ID for cache handling

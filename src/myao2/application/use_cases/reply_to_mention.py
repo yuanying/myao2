@@ -8,6 +8,7 @@ from myao2.application.use_cases.helpers import (
 from myao2.config import PersonaConfig
 from myao2.domain.entities import Message
 from myao2.domain.repositories import ChannelRepository, MessageRepository
+from myao2.domain.repositories.memo_repository import MemoRepository
 from myao2.domain.repositories.memory_repository import MemoryRepository
 from myao2.domain.services import (
     MessagingService,
@@ -31,6 +32,7 @@ class ReplyToMentionUseCase:
         memory_repository: MemoryRepository,
         persona: PersonaConfig,
         bot_user_id: str,
+        memo_repository: MemoRepository | None = None,
     ) -> None:
         """Initialize the use case.
 
@@ -42,6 +44,7 @@ class ReplyToMentionUseCase:
             memory_repository: Repository for memory access.
             persona: Bot persona configuration.
             bot_user_id: The bot's user ID.
+            memo_repository: Repository for memo access (optional).
         """
         self._messaging_service = messaging_service
         self._response_generator = response_generator
@@ -50,6 +53,7 @@ class ReplyToMentionUseCase:
         self._memory_repository = memory_repository
         self._persona = persona
         self._bot_user_id = bot_user_id
+        self._memo_repository = memo_repository
 
     async def execute(self, message: Message) -> None:
         """Execute the use case.
@@ -85,6 +89,7 @@ class ReplyToMentionUseCase:
             channel=message.channel,
             persona=self._persona,
             target_thread_ts=message.thread_ts,
+            memo_repository=self._memo_repository,
         )
 
         # 5. Generate response with context

@@ -21,6 +21,45 @@
         {% endif %}
     {% endfor %}
 {% endif %}
+## メモ管理
+
+あなたが記憶しておくべき重要な情報です。メモツールを使って管理できます。
+
+### メモ管理ガイドライン
+
+- **いつメモすべきか**: ユーザーの好み、興味、家族構成、仕事情報、依頼事項、約束、予定など重要な情報を聞いた時
+- **優先度の付け方**:
+  - 5: 常に覚えておくべき重要情報（名前、家族、重要な予定）
+  - 4: 頻繁に参照すべき情報（好み、興味、定期的な予定）
+  - 3: 参考になる情報（一般的な話題、一時的な予定）
+  - 2: 補足情報
+  - 1: 一時的なメモ
+- **タグの付け方**: 既存タグを確認してから使用（list_memo_tagsで確認）。類似タグがあればそれを使う
+- **詳細情報**: より詳しい情報はedit_memoのdetailパラメータで記録。get_memoで詳細を確認可能
+- **メモの更新**: 情報が古くなったら edit_memo で更新、不要になったら remove_memo で削除
+- **重複注意**: 以下のメモ一覧を確認し、同じ内容のメモを追加しないこと
+- **主語を明記**: 複数人のチャットなので「誰が」が重要。人に関連するメモには必ず主語を入れる（例: 「ラーメンが好き」→「○○さんはラーメンが好き」）
+
+{% if high_priority_memos %}
+### 重要なメモ（優先度4以上）
+
+{% for memo in high_priority_memos %}
+- **ID**: {{ memo.id | string | truncate(8, True, '') }}
+  - 優先度: {{ memo.priority }}
+  - タグ: {{ memo.tags | join(", ") if memo.tags else "なし" }}
+  - 更新日: {{ memo.updated_at | format_timestamp }}
+  - 内容: {{ memo.content }}{% if memo.has_detail %} **[詳細あり]**{% endif %}
+
+{% endfor %}
+{% endif %}
+{% if recent_memos %}
+### 直近のメモ
+
+{% for memo in recent_memos %}
+- **ID**: {{ memo.id | string | truncate(8, True, '') }} / 優先度: {{ memo.priority }} / タグ: {{ memo.tags | join(", ") if memo.tags else "なし" }} / {{ memo.content }}{% if memo.has_detail %} [詳細あり]{% endif %}
+
+{% endfor %}
+{% endif %}
 ## 現在の会話
 
 現在は、#{{ current_channel_name }} チャンネルにいます。

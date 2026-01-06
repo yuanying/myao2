@@ -124,4 +124,6 @@ class StrandsResponseJudgment:
             target_thread_messages=target_thread_messages,
             current_time=current_time,
             persona=context.persona,
+            high_priority_memos=context.high_priority_memos,
+            recent_memos=context.recent_memos,
         )
