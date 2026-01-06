@@ -167,6 +167,7 @@ async def build_context_with_memory(
     target_thread_ts: str | None = None,
     message_limit: int = DEFAULT_MESSAGE_LIMIT,
     since: datetime | None = None,
+    memo_repository: MemoRepository | None = None,
 ) -> Context:
     """Build Context with memory from repository.
 
@@ -188,6 +189,7 @@ async def build_context_with_memory(
         target_thread_ts: Target thread timestamp (None for top-level).
         message_limit: Maximum number of messages to retrieve.
         since: Message retrieval start time (optional, for GenerateMemory).
+        memo_repository: Repository for memo access (optional).
 
     Returns:
         Context instance with messages and memories populated.
@@ -250,6 +252,12 @@ async def build_context_with_memory(
         if thread_mem:
             thread_memories[target_thread_ts] = thread_mem.content
 
+    # Retrieve memos if memo_repository is provided
+    high_priority_memos: list[Memo] = []
+    recent_memos: list[Memo] = []
+    if memo_repository:
+        high_priority_memos, recent_memos = await get_memos_for_context(memo_repository)
+
     return Context(
         persona=persona,
         conversation_history=channel_messages,
@@ -258,6 +266,8 @@ async def build_context_with_memory(
         channel_memories=channel_memories,
         thread_memories=thread_memories,
         target_thread_ts=target_thread_ts,
+        high_priority_memos=high_priority_memos,
+        recent_memos=recent_memos,
     )
 
 

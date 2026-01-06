@@ -692,3 +692,93 @@ class TestGetMemosForContext:
         await get_memos_for_context(mock_memo_repository)
 
         mock_memo_repository.find_recent.assert_awaited_once_with(limit=5)
+
+
+class TestBuildContextWithMemoryMemoIntegration:
+    """Tests for build_context_with_memory with memo_repository."""
+
+    @pytest.mark.asyncio
+    async def test_with_memo_repository_populates_memo_fields(
+        self,
+        mock_memory_repository: Mock,
+        mock_message_repository: Mock,
+        mock_channel_repository: Mock,
+        mock_memo_repository: Mock,
+        persona_config: PersonaConfig,
+        channel: Channel,
+    ) -> None:
+        """Test that memo_repository populates memo fields in Context."""
+        high_priority_memo = create_test_memo("Important", priority=5)
+        recent_memo = create_test_memo("Recent", priority=3)
+
+        mock_memo_repository.find_by_priority_gte = AsyncMock(
+            return_value=[high_priority_memo]
+        )
+        mock_memo_repository.find_recent = AsyncMock(return_value=[recent_memo])
+
+        result = await build_context_with_memory(
+            memory_repository=mock_memory_repository,
+            message_repository=mock_message_repository,
+            channel_repository=mock_channel_repository,
+            channel=channel,
+            persona=persona_config,
+            memo_repository=mock_memo_repository,
+        )
+
+        assert len(result.high_priority_memos) == 1
+        assert result.high_priority_memos[0].priority == 5
+        assert len(result.recent_memos) == 1
+        assert result.recent_memos[0].priority == 3
+
+    @pytest.mark.asyncio
+    async def test_without_memo_repository_empty_memo_fields(
+        self,
+        mock_memory_repository: Mock,
+        mock_message_repository: Mock,
+        mock_channel_repository: Mock,
+        persona_config: PersonaConfig,
+        channel: Channel,
+    ) -> None:
+        """Test that Context has empty memo fields without memo_repository."""
+        result = await build_context_with_memory(
+            memory_repository=mock_memory_repository,
+            message_repository=mock_message_repository,
+            channel_repository=mock_channel_repository,
+            channel=channel,
+            persona=persona_config,
+            # No memo_repository
+        )
+
+        assert result.high_priority_memos == []
+        assert result.recent_memos == []
+
+    @pytest.mark.asyncio
+    async def test_memo_repository_excludes_duplicates(
+        self,
+        mock_memory_repository: Mock,
+        mock_message_repository: Mock,
+        mock_channel_repository: Mock,
+        mock_memo_repository: Mock,
+        persona_config: PersonaConfig,
+        channel: Channel,
+    ) -> None:
+        """Test that recent memos exclude high priority memos."""
+        high_priority_memo = create_test_memo("Important", priority=5)
+
+        mock_memo_repository.find_by_priority_gte = AsyncMock(
+            return_value=[high_priority_memo]
+        )
+        # Return same memo in recent - should be excluded
+        mock_memo_repository.find_recent = AsyncMock(return_value=[high_priority_memo])
+
+        result = await build_context_with_memory(
+            memory_repository=mock_memory_repository,
+            message_repository=mock_message_repository,
+            channel_repository=mock_channel_repository,
+            channel=channel,
+            persona=persona_config,
+            memo_repository=mock_memo_repository,
+        )
+
+        assert len(result.high_priority_memos) == 1
+        assert result.recent_memos == []  # Duplicate excluded
