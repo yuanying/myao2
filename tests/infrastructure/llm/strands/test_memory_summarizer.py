@@ -95,7 +95,8 @@ class TestStrandsMemorySummarizer:
                 memory_type=MemoryType.SHORT_TERM,
             )
 
-            assert result == "Thread summary"
+            assert result.text == "Thread summary"
+            assert result.metrics is not None
             mock_agent.invoke_async.assert_awaited_once()
 
     async def test_summarize_channel_short_term(
@@ -144,7 +145,7 @@ class TestStrandsMemorySummarizer:
                 memory_type=MemoryType.SHORT_TERM,
             )
 
-            assert result == "Channel short-term summary"
+            assert result.text == "Channel short-term summary"
 
     async def test_summarize_channel_long_term(
         self,
@@ -188,7 +189,7 @@ class TestStrandsMemorySummarizer:
                 existing_memory="Previous history",
             )
 
-            assert result == "Channel long-term summary"
+            assert result.text == "Channel long-term summary"
 
     async def test_summarize_workspace_short_term(
         self,
@@ -237,7 +238,7 @@ class TestStrandsMemorySummarizer:
                 memory_type=MemoryType.SHORT_TERM,
             )
 
-            assert result == "Workspace short-term summary"
+            assert result.text == "Workspace short-term summary"
 
     async def test_summarize_workspace_long_term(
         self,
@@ -281,7 +282,7 @@ class TestStrandsMemorySummarizer:
                 existing_memory="Previous workspace history",
             )
 
-            assert result == "Workspace long-term summary"
+            assert result.text == "Workspace long-term summary"
 
     async def test_summarize_no_content_returns_existing_memory(
         self,
@@ -307,7 +308,8 @@ class TestStrandsMemorySummarizer:
             existing_memory="Existing memory content",
         )
 
-        assert result == "Existing memory content"
+        assert result.text == "Existing memory content"
+        assert result.metrics is None
 
     async def test_summarize_no_content_returns_empty_string(
         self,
@@ -332,7 +334,8 @@ class TestStrandsMemorySummarizer:
             memory_type=MemoryType.SHORT_TERM,
         )
 
-        assert result == ""
+        assert result.text == ""
+        assert result.metrics is None
 
     async def test_summarize_error_mapping(
         self,

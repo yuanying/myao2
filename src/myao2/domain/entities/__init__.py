@@ -5,6 +5,8 @@ from myao2.domain.entities.channel_messages import ChannelMemory, ChannelMessage
 from myao2.domain.entities.context import Context
 from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
+from myao2.domain.entities.llm_metrics import LLMMetrics
+from myao2.domain.entities.llm_result import GenerationResult, SummarizationResult
 from myao2.domain.entities.memory import (
     Memory,
     MemoryScope,
@@ -21,12 +23,15 @@ __all__ = [
     "ChannelMemory",
     "ChannelMessages",
     "Context",
+    "GenerationResult",
     "JudgmentCache",
     "JudgmentResult",
+    "LLMMetrics",
     "Memory",
     "MemoryScope",
     "MemoryType",
     "Message",
+    "SummarizationResult",
     "User",
     "create_memory",
     "make_thread_scope_id",

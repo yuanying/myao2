@@ -43,7 +43,8 @@ class TestStrandsResponseGenerator:
 
             result = await generator.generate(context=sample_context)
 
-            assert result == "Hello! Nice to meet you."
+            assert result.text == "Hello! Nice to meet you."
+            assert result.metrics is not None
             mock_agent.invoke_async.assert_awaited_once()
 
     async def test_generate_top_level_reply(
@@ -87,7 +88,7 @@ class TestStrandsResponseGenerator:
 
             result = await generator.generate(context=context)
 
-            assert result == "Hello!"
+            assert result.text == "Hello!"
             # Check that query prompt contains top-level instruction
             call_args = mock_agent.invoke_async.call_args
             query_prompt = call_args.args[0]
@@ -149,7 +150,7 @@ class TestStrandsResponseGenerator:
 
             result = await generator.generate(context=context)
 
-            assert result == "Thread response!"
+            assert result.text == "Thread response!"
             # Check that query prompt contains thread instruction
             call_args = mock_agent.invoke_async.call_args
             query_prompt = call_args.args[0]

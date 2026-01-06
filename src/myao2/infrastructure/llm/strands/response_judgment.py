@@ -6,7 +6,7 @@ from strands import Agent
 from strands.models.litellm import LiteLLMModel
 
 from myao2.config.models import AgentConfig
-from myao2.domain.entities import Context, JudgmentResult
+from myao2.domain.entities import Context, JudgmentResult, LLMMetrics
 from myao2.infrastructure.llm.strands.exceptions import map_strands_exception
 from myao2.infrastructure.llm.strands.models import JudgmentOutput
 from myao2.infrastructure.llm.templates import create_jinja_env, format_timestamp
@@ -67,10 +67,12 @@ class StrandsResponseJudgment:
                     f"Expected JudgmentOutput but got {type(output).__name__}"
                 )
 
+            metrics = LLMMetrics.from_strands_result(result)
             return JudgmentResult(
                 should_respond=output.should_respond,
                 reason=output.reason,
                 confidence=output.confidence,
+                metrics=metrics,
             )
         except Exception as e:
             raise map_strands_exception(e)

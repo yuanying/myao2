@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from myao2.application.use_cases.helpers import (
     build_context_with_memory,
     create_bot_message_for_thread,
+    log_llm_metrics,
 )
 from myao2.config import Config, JudgmentSkipConfig
 from myao2.domain.entities import Channel, Context
@@ -199,6 +200,7 @@ class AutonomousResponseUseCase:
 
         # Perform response judgment
         judgment_result = await self._response_judgment.judge(context=context)
+        log_llm_metrics("judge", judgment_result.metrics)
 
         # Log judgment result
         logger.info(
@@ -218,7 +220,8 @@ class AutonomousResponseUseCase:
             return
 
         # Generate response using the same context
-        response_text = await self._response_generator.generate(context=context)
+        generation_result = await self._response_generator.generate(context=context)
+        log_llm_metrics("generate", generation_result.metrics)
 
         # Send response
         logger.info(
@@ -229,7 +232,7 @@ class AutonomousResponseUseCase:
         try:
             await self._messaging_service.send_message(
                 channel_id=channel.id,
-                text=response_text,
+                text=generation_result.text,
                 thread_ts=thread_ts,
             )
         except ChannelNotAccessibleError:
@@ -243,7 +246,7 @@ class AutonomousResponseUseCase:
 
         # Save bot response message
         bot_message = create_bot_message_for_thread(
-            response_text,
+            generation_result.text,
             channel,
             thread_ts,
             self._bot_user_id,

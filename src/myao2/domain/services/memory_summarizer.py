@@ -3,6 +3,7 @@
 from typing import Protocol
 
 from myao2.domain.entities.context import Context
+from myao2.domain.entities.llm_result import SummarizationResult
 from myao2.domain.entities.memory import MemoryScope, MemoryType
 
 
@@ -24,7 +25,7 @@ class MemorySummarizer(Protocol):
         scope: MemoryScope,
         memory_type: MemoryType,
         existing_memory: str | None = None,
-    ) -> str:
+    ) -> SummarizationResult:
         """Generate memory summary from context.
 
         Args:
@@ -38,7 +39,7 @@ class MemorySummarizer(Protocol):
                 (used only for long-term memory).
 
         Returns:
-            Generated memory text. Returns empty string or existing_memory
-            if there's nothing to summarize.
+            SummarizationResult containing the memory text and metrics.
+            Returns empty text or existing_memory if there's nothing to summarize.
         """
         ...

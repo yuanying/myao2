@@ -21,7 +21,7 @@ from myao2.config import (
     ResponseIntervalConfig,
     SlackConfig,
 )
-from myao2.domain.entities import Channel, Context, Message, User
+from myao2.domain.entities import Channel, Context, GenerationResult, Message, User
 from myao2.domain.entities.channel_messages import ChannelMessages
 from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
@@ -58,7 +58,9 @@ def mock_response_judgment() -> Mock:
 def mock_response_generator() -> Mock:
     """Create mock response generator."""
     generator = Mock()
-    generator.generate = AsyncMock(return_value="Hello from bot!")
+    generator.generate = AsyncMock(
+        return_value=GenerationResult(text="Hello from bot!")
+    )
     return generator
 
 
