@@ -1,81 +1,38 @@
-# 01c: メモツール関数 - 詳細設計書
+"""Memo tools for strands-agents.
 
-**Status: Done**
+LLM が自発的に重要だと思ったことを記憶に残すためのメモツール群。
+"""
 
-## 概要
+from datetime import datetime, timezone
+from uuid import UUID
 
-strands-agents の `@tool` デコレータを使用してメモツール関数を定義する。
-
----
-
-## 新規作成ファイル
-
-| ファイル | 説明 |
-|---------|------|
-| `src/myao2/infrastructure/llm/strands/memo_tools.py` | メモツール関数、MemoToolsFactory |
-
-## 変更ファイル
-
-| ファイル | 変更内容 |
-|---------|---------|
-| `src/myao2/infrastructure/llm/strands/__init__.py` | memo_tools エクスポート追加 |
-
-## テストファイル
-
-| ファイル | 説明 |
-|---------|------|
-| `tests/infrastructure/llm/strands/test_memo_tools.py` | メモツール関数のテスト |
-
----
-
-## 実装方針
-
-### ToolContext によるリポジトリアクセス
-
-strands-agents の `@tool(context=True)` を使用し、`ToolContext.invocation_state` から MemoRepository にアクセスする。
-
-```python
 from strands import tool
 from strands.types.tools import ToolContext
 
+from myao2.domain.entities.memo import Memo, create_memo
+from myao2.domain.repositories.memo_repository import MemoRepository
+
 MEMO_REPOSITORY_KEY = "memo_repository"
 
+
 def get_memo_repository(tool_context: ToolContext) -> MemoRepository:
-    """ToolContext から MemoRepository を取得"""
+    """ToolContext から MemoRepository を取得する。
+
+    Args:
+        tool_context: ツールコンテキスト
+
+    Returns:
+        MemoRepository インスタンス
+
+    Raises:
+        RuntimeError: MemoRepository が invocation_state に存在しない場合
+    """
     repo = tool_context.invocation_state.get(MEMO_REPOSITORY_KEY)
     if repo is None:
         raise RuntimeError("MemoRepository not found in invocation_state")
     return repo
-```
 
-### MemoToolsFactory
 
-リポジトリの注入と invocation_state の構築を担当。
-
-```python
-class MemoToolsFactory:
-    """メモツールのファクトリ"""
-
-    def __init__(self, memo_repository: MemoRepository) -> None:
-        self._memo_repository = memo_repository
-
-    def get_invocation_state(self) -> dict:
-        """invocation_state を取得"""
-        return {MEMO_REPOSITORY_KEY: self._memo_repository}
-
-    @property
-    def tools(self) -> list:
-        """ツール関数のリストを取得"""
-        return MEMO_TOOLS
-```
-
----
-
-## ツール関数定義
-
-### add_memo
-
-```python
 @tool(context=True)
 async def add_memo(
     content: str,
@@ -98,19 +55,21 @@ async def add_memo(
             - 2: 補足情報
             - 1: 一時的なメモ
         tags: タグリスト（最大3つ）。既存タグを確認してから指定すること。
+        tool_context: ツールコンテキスト
 
     Returns:
         追加結果メッセージ
     """
     repo = get_memo_repository(tool_context)
-    memo = create_memo(content=content, priority=priority, tags=tags)
+    try:
+        memo = create_memo(content=content, priority=priority, tags=tags)
+    except ValueError as e:
+        return f"メモの作成に失敗しました: {e}"
+
     await repo.save(memo)
     return f"メモを追加しました（ID: {str(memo.id)[:8]}）"
-```
 
-### edit_memo
 
-```python
 @tool(context=True)
 async def edit_memo(
     memo_id: str,
@@ -131,6 +90,7 @@ async def edit_memo(
         priority: 新しい優先度（変更する場合のみ）
         tags: 新しいタグリスト（変更する場合のみ）
         detail: 詳細情報（上書き更新される）
+        tool_context: ツールコンテキスト
 
     Returns:
         編集結果メッセージ
@@ -145,28 +105,29 @@ async def edit_memo(
     if existing is None:
         return f"メモが見つかりません（ID: {memo_id}）"
 
-    # 変更がない場合はそのまま返す
+    # 変更がない場合はそのまま保持
     new_content = content if content is not None else existing.content
     new_priority = priority if priority is not None else existing.priority
     new_tags = tags if tags is not None else existing.tags
     new_detail = detail if detail is not None else existing.detail
 
-    updated = Memo(
-        id=existing.id,
-        content=new_content,
-        priority=new_priority,
-        tags=new_tags,
-        detail=new_detail,
-        created_at=existing.created_at,
-        updated_at=datetime.now(timezone.utc),
-    )
+    try:
+        updated = Memo(
+            id=existing.id,
+            content=new_content,
+            priority=new_priority,
+            tags=new_tags,
+            detail=new_detail,
+            created_at=existing.created_at,
+            updated_at=datetime.now(timezone.utc),
+        )
+    except ValueError as e:
+        return f"メモの更新に失敗しました: {e}"
+
     await repo.save(updated)
     return f"メモを更新しました（ID: {memo_id[:8]}）"
-```
 
-### remove_memo
 
-```python
 @tool(context=True)
 async def remove_memo(
     memo_id: str,
@@ -178,6 +139,7 @@ async def remove_memo(
 
     Args:
         memo_id: 削除するメモのID
+        tool_context: ツールコンテキスト
 
     Returns:
         削除結果メッセージ
@@ -193,11 +155,8 @@ async def remove_memo(
         return f"メモを削除しました（ID: {memo_id[:8]}）"
     else:
         return f"メモが見つかりません（ID: {memo_id}）"
-```
 
-### list_memo
 
-```python
 @tool(context=True)
 async def list_memo(
     tag: str | None,
@@ -211,6 +170,7 @@ async def list_memo(
         tag: 指定したタグを持つメモのみフィルター（optional）
         offset: スキップする件数（ページネーション用、デフォルト: 0）
         limit: 取得する最大件数（デフォルト: 10）
+        tool_context: ツールコンテキスト
 
     Returns:
         メモ一覧（ID、優先度、タグ、内容、詳細有無を含む）
@@ -244,11 +204,8 @@ async def list_memo(
         )
 
     return "\n".join(lines)
-```
 
-### get_memo
 
-```python
 @tool(context=True)
 async def get_memo(
     memo_id: str,
@@ -260,6 +217,7 @@ async def get_memo(
 
     Args:
         memo_id: 取得するメモのID
+        tool_context: ツールコンテキスト
 
     Returns:
         メモの全情報（ID, 優先度, タグ, 内容, 詳細情報, 作成日, 更新日）
@@ -286,23 +244,25 @@ async def get_memo(
     if memo.has_detail:
         lines.append(f"- 詳細: {memo.detail}")
 
-    lines.extend([
-        f"- 作成日: {memo.created_at.strftime('%Y-%m-%d %H:%M')}",
-        f"- 更新日: {memo.updated_at.strftime('%Y-%m-%d %H:%M')}",
-    ])
+    lines.extend(
+        [
+            f"- 作成日: {memo.created_at.strftime('%Y-%m-%d %H:%M')}",
+            f"- 更新日: {memo.updated_at.strftime('%Y-%m-%d %H:%M')}",
+        ]
+    )
 
     return "\n".join(lines)
-```
 
-### list_memo_tags
 
-```python
 @tool(context=True)
 async def list_memo_tags(tool_context: ToolContext) -> str:
     """メモに使用されているタグの一覧を取得する。
 
     新しいタグを作成する前に、既存のタグを確認するために使用する。
     類似のタグが存在する場合は、新規作成せずにそれを使用すること。
+
+    Args:
+        tool_context: ツールコンテキスト
 
     Returns:
         タグ名、使用数、最新更新日のリスト
@@ -319,11 +279,8 @@ async def list_memo_tags(tool_context: ToolContext) -> str:
         lines.append(f"- {stat.tag}: {stat.count}件（最終更新: {date_str}）")
 
     return "\n".join(lines)
-```
 
-### MEMO_TOOLS
 
-```python
 MEMO_TOOLS = [
     add_memo,
     edit_memo,
@@ -332,55 +289,35 @@ MEMO_TOOLS = [
     get_memo,
     list_memo_tags,
 ]
-```
 
----
 
-## テスト項目
+class MemoToolsFactory:
+    """メモツールのファクトリ。
 
-### TestAddMemo
+    リポジトリの注入と invocation_state の構築を担当する。
+    """
 
-- 正常な追加
-- タグ付きで追加
-- 優先度範囲外でエラー
-- 空コンテンツでエラー
+    def __init__(self, memo_repository: MemoRepository) -> None:
+        """ファクトリを初期化する。
 
-### TestEditMemo
+        Args:
+            memo_repository: メモリポジトリ
+        """
+        self._memo_repository = memo_repository
 
-- 全フィールド更新
-- 一部フィールドのみ更新
-- detail 追加
-- 存在しないメモ
-- 無効なID形式
+    def get_invocation_state(self) -> dict:
+        """invocation_state を取得する。
 
-### TestRemoveMemo
+        Returns:
+            Agent に渡す invocation_state 辞書
+        """
+        return {MEMO_REPOSITORY_KEY: self._memo_repository}
 
-- 正常な削除
-- 存在しないメモ
-- 無効なID形式
+    @property
+    def tools(self) -> list:
+        """ツール関数のリストを取得する。
 
-### TestListMemo
-
-- 空の場合
-- 複数件の場合
-- タグフィルター
-- ページネーション
-- 詳細ありマーカー
-
-### TestGetMemo
-
-- 正常な取得
-- 詳細情報付き
-- 存在しないメモ
-- 無効なID形式
-
-### TestListMemoTags
-
-- タグなしの場合
-- 複数タグの場合
-- ソート順の確認
-
-### TestMemoToolsFactory
-
-- invocation_state の構築
-- tools プロパティ
+        Returns:
+            メモツール関数のリスト
+        """
+        return MEMO_TOOLS
