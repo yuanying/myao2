@@ -4,7 +4,7 @@ from strands import Agent
 from strands.models.litellm import LiteLLMModel
 
 from myao2.config.models import AgentConfig, MemoryConfig
-from myao2.domain.entities import Context
+from myao2.domain.entities import Context, LLMMetrics, SummarizationResult
 from myao2.domain.entities.memory import MemoryScope, MemoryType
 from myao2.infrastructure.llm.strands.exceptions import map_strands_exception
 from myao2.infrastructure.llm.templates import create_jinja_env, format_timestamp
@@ -45,7 +45,7 @@ class StrandsMemorySummarizer:
         scope: MemoryScope,
         memory_type: MemoryType,
         existing_memory: str | None = None,
-    ) -> str:
+    ) -> SummarizationResult:
         """Generate memory summary from context.
 
         Args:
@@ -55,10 +55,10 @@ class StrandsMemorySummarizer:
             existing_memory: Existing memory for incremental update.
 
         Returns:
-            Generated memory text.
+            SummarizationResult containing the memory text and metrics.
         """
         if not self._has_content_to_summarize(context, scope, memory_type):
-            return existing_memory or ""
+            return SummarizationResult(text=existing_memory or "", metrics=None)
 
         system_prompt = self.build_system_prompt(context, scope, memory_type)
         query_prompt = self.build_query_prompt(
@@ -70,7 +70,8 @@ class StrandsMemorySummarizer:
 
         try:
             result = await agent.invoke_async(query_prompt)
-            return str(result)
+            metrics = LLMMetrics.from_strands_result(result)
+            return SummarizationResult(text=str(result), metrics=metrics)
         except Exception as e:
             raise map_strands_exception(e)
 

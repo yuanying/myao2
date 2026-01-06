@@ -14,6 +14,7 @@ from myao2.domain.entities import (
     MemoryScope,
     MemoryType,
     Message,
+    SummarizationResult,
     User,
 )
 from myao2.domain.entities.context import Context
@@ -51,7 +52,7 @@ def mock_channel_repository() -> Mock:
 def mock_memory_summarizer() -> Mock:
     """Create mock memory summarizer."""
     summarizer = Mock()
-    summarizer.summarize = AsyncMock(return_value="summary")
+    summarizer.summarize = AsyncMock(return_value=SummarizationResult(text="summary"))
     return summarizer
 
 
@@ -171,9 +172,9 @@ class TestGenerateMemoryUseCaseExecute:
             scope: MemoryScope,
             memory_type: MemoryType,
             existing_memory: str | None = None,
-        ) -> str:
+        ) -> SummarizationResult:
             call_order.append((scope, memory_type))
-            return "summary"
+            return SummarizationResult(text="summary")
 
         mock_memory_summarizer.summarize.side_effect = track_summarize
 
@@ -222,10 +223,10 @@ class TestGenerateMemoryUseCaseExecute:
             scope: MemoryScope,
             memory_type: MemoryType,
             existing_memory: str | None = None,
-        ) -> str:
+        ) -> SummarizationResult:
             if scope == MemoryScope.THREAD:
                 thread_calls.append(scope)
-            return "summary"
+            return SummarizationResult(text="summary")
 
         mock_memory_summarizer.summarize.side_effect = track_summarize
 
@@ -348,9 +349,9 @@ class TestGenerateChannelMemories:
             scope: MemoryScope,
             memory_type: MemoryType,
             existing_memory: str | None = None,
-        ) -> str:
+        ) -> SummarizationResult:
             captured_contexts.append((context, scope, memory_type))
-            return "summary"
+            return SummarizationResult(text="summary")
 
         mock_memory_summarizer.summarize.side_effect = capture_context
 
@@ -390,11 +391,11 @@ class TestGenerateChannelMemories:
             scope: MemoryScope,
             memory_type: MemoryType,
             existing_memory: str | None = None,
-        ) -> str:
+        ) -> SummarizationResult:
             captured_contexts.append((context, scope, memory_type))
             if memory_type == MemoryType.SHORT_TERM:
-                return "short_term_summary"
-            return "long_term_summary"
+                return SummarizationResult(text="short_term_summary")
+            return SummarizationResult(text="long_term_summary")
 
         mock_memory_summarizer.summarize.side_effect = capture_context
 
@@ -449,10 +450,10 @@ class TestGenerateChannelMemories:
             scope: MemoryScope,
             memory_type: MemoryType,
             existing_memory: str | None = None,
-        ) -> str:
+        ) -> SummarizationResult:
             if memory_type == MemoryType.LONG_TERM:
                 captured_existing.append(existing_memory)
-            return "summary"
+            return SummarizationResult(text="summary")
 
         mock_memory_summarizer.summarize.side_effect = capture_existing
 
@@ -589,9 +590,9 @@ class TestGenerateWorkspaceMemory:
             scope: MemoryScope,
             memory_type: MemoryType,
             existing_memory: str | None = None,
-        ) -> str:
+        ) -> SummarizationResult:
             captured_contexts.append((context, scope, memory_type))
-            return "summary"
+            return SummarizationResult(text="summary")
 
         mock_memory_summarizer.summarize.side_effect = capture_context
 
@@ -646,10 +647,10 @@ class TestGenerateWorkspaceMemory:
             scope: MemoryScope,
             memory_type: MemoryType,
             existing_memory: str | None = None,
-        ) -> str:
+        ) -> SummarizationResult:
             if memory_type == MemoryType.LONG_TERM:
                 captured_existing.append(existing_memory)
-            return "summary"
+            return SummarizationResult(text="summary")
 
         mock_memory_summarizer.summarize.side_effect = capture_existing
 
@@ -730,10 +731,10 @@ class TestGenerateThreadMemory:
             scope: MemoryScope,
             memory_type: MemoryType,
             existing_memory: str | None = None,
-        ) -> str:
+        ) -> SummarizationResult:
             nonlocal captured_context
             captured_context = context
-            return "summary"
+            return SummarizationResult(text="summary")
 
         mock_memory_summarizer.summarize.side_effect = capture_context
 
@@ -865,7 +866,9 @@ class TestIncrementalUpdate:
             source_latest_message_ts="M001",  # Older than M002
         )
         mock_memory_repository.find_by_scope_and_type.return_value = existing_memory
-        mock_memory_summarizer.summarize.return_value = "new summary"
+        mock_memory_summarizer.summarize.return_value = SummarizationResult(
+            text="new summary"
+        )
 
         result, any_regenerated = await use_case.generate_channel_memories()
 
@@ -1069,7 +1072,7 @@ class TestSaveMemory:
         mock_channel_repository.find_all.return_value = [channel]
         messages = [create_message(channel, user, timestamp)]
         mock_message_repository.find_by_channel_since.return_value = messages
-        mock_memory_summarizer.summarize.return_value = ""
+        mock_memory_summarizer.summarize.return_value = SummarizationResult(text="")
 
         await use_case.generate_channel_memories()
 

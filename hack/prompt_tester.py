@@ -56,6 +56,7 @@ from myao2.application.use_cases.helpers import (  # noqa: E402
     build_context_with_memory,
 )
 from myao2.config.loader import load_config  # noqa: E402
+from myao2.domain.entities import LLMMetrics  # noqa: E402
 from myao2.domain.entities.memory import MemoryScope, MemoryType  # noqa: E402
 from myao2.infrastructure.llm.strands import (  # noqa: E402
     StrandsMemorySummarizer,
@@ -90,6 +91,42 @@ def print_response(title: str, response: str | dict) -> None:
     else:
         print(response)
     print("-" * 60 + "\n")
+
+
+def print_metrics(metrics: LLMMetrics | None) -> None:
+    """LLMMetricsを整形して出力"""
+    if metrics is None:
+        print("(Metrics not available)")
+        return
+
+    print("\n" + "+" * 60)
+    print("  Metrics")
+    print("+" * 60)
+
+    # Token usage
+    print(f"  Input tokens:  {metrics.input_tokens:>8}")
+    print(f"  Output tokens: {metrics.output_tokens:>8}")
+    print(f"  Total tokens:  {metrics.total_tokens:>8}")
+
+    # Performance
+    print(f"  Total cycles:  {metrics.total_cycles:>8}")
+    print(f"  Duration:      {metrics.total_duration:.2f}s")
+
+    # Latency
+    if metrics.latency_ms:
+        print(f"  Latency:       {metrics.latency_ms:>8}ms")
+
+    # Tool usage
+    if metrics.tool_usage:
+        print("\n  Tool Usage:")
+        for tool_name, stats in metrics.tool_usage.items():
+            exec_stats = stats.get("execution_stats", {})
+            print(f"    - {tool_name}:")
+            print(f"        Calls: {exec_stats.get('call_count', 0)}")
+            print(f"        Success rate: {exec_stats.get('success_rate', 0):.1%}")
+            print(f"        Avg time: {exec_stats.get('average_time', 0):.3f}s")
+
+    print("+" * 60 + "\n")
 
 
 async def resolve_channel(
@@ -178,8 +215,9 @@ async def run_generate(
 
     if not args.dry_run:
         print("Calling LLM...")
-        response = await generator.generate(context)
-        print_response("Generated Response", response)
+        result = await generator.generate(context)
+        print_response("Generated Response", result.text)
+        print_metrics(result.metrics)
 
 
 async def run_judgment(
@@ -232,6 +270,7 @@ async def run_judgment(
                 "confidence": result.confidence,
             },
         )
+        print_metrics(result.metrics)
 
 
 async def run_summarize(
@@ -320,7 +359,8 @@ async def run_summarize(
         result = await summarizer.summarize(
             context, scope, memory_type, existing_memory
         )
-        print_response("Generated Memory", result)
+        print_response("Generated Memory", result.text)
+        print_metrics(result.metrics)
 
 
 def create_parser() -> argparse.ArgumentParser:

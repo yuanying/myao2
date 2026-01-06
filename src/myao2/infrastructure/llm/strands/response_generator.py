@@ -4,7 +4,7 @@ from strands import Agent
 from strands.models.litellm import LiteLLMModel
 
 from myao2.config.models import AgentConfig
-from myao2.domain.entities import Context
+from myao2.domain.entities import Context, GenerationResult, LLMMetrics
 from myao2.infrastructure.llm.strands.exceptions import map_strands_exception
 from myao2.infrastructure.llm.templates import create_jinja_env, format_timestamp
 
@@ -35,7 +35,7 @@ class StrandsResponseGenerator:
         self._system_template = self._jinja_env.get_template("response_system.j2")
         self._query_template = self._jinja_env.get_template("response_query.j2")
 
-    async def generate(self, context: Context) -> str:
+    async def generate(self, context: Context) -> GenerationResult:
         """Generate a response.
 
         The target thread/message is identified by context.target_thread_ts.
@@ -46,7 +46,7 @@ class StrandsResponseGenerator:
             context: Conversation context (history, persona info, target_thread_ts).
 
         Returns:
-            Generated response text.
+            GenerationResult containing the response text and metrics.
         """
         system_prompt = self.build_system_prompt(context)
         query_prompt = self.build_query_prompt(context)
@@ -56,7 +56,8 @@ class StrandsResponseGenerator:
 
         try:
             result = await agent.invoke_async(query_prompt)
-            return str(result)
+            metrics = LLMMetrics.from_strands_result(result)
+            return GenerationResult(text=str(result), metrics=metrics)
         except Exception as e:
             raise map_strands_exception(e)
 

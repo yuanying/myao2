@@ -3,7 +3,10 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
-from myao2.application.use_cases.helpers import build_context_with_memory
+from myao2.application.use_cases.helpers import (
+    build_context_with_memory,
+    log_llm_metrics,
+)
 from myao2.config.models import MemoryConfig, PersonaConfig
 from myao2.domain.entities.channel import Channel
 from myao2.domain.entities.channel_messages import ChannelMemory, ChannelMessages
@@ -209,32 +212,34 @@ class GenerateMemoryUseCase:
         )
 
         # Generate short-term memory
-        short_term_content = await self._memory_summarizer.summarize(
+        short_term_result = await self._memory_summarizer.summarize(
             context=context,
             scope=MemoryScope.WORKSPACE,
             memory_type=MemoryType.SHORT_TERM,
         )
+        log_llm_metrics("summarize(workspace/short_term)", short_term_result.metrics)
 
         # Generate long-term memory
-        long_term_content = await self._memory_summarizer.summarize(
+        long_term_result = await self._memory_summarizer.summarize(
             context=context,
             scope=MemoryScope.WORKSPACE,
             memory_type=MemoryType.LONG_TERM,
             existing_memory=existing_long_term_content,
         )
+        log_llm_metrics("summarize(workspace/long_term)", long_term_result.metrics)
 
         # Save memories
         await self._save_memory(
             MemoryScope.WORKSPACE,
             self.WORKSPACE_SCOPE_ID,
             MemoryType.SHORT_TERM,
-            short_term_content,
+            short_term_result.text,
         )
         await self._save_memory(
             MemoryScope.WORKSPACE,
             self.WORKSPACE_SCOPE_ID,
             MemoryType.LONG_TERM,
-            long_term_content,
+            long_term_result.text,
         )
 
     async def generate_thread_memory(
@@ -288,18 +293,19 @@ class GenerateMemoryUseCase:
         )
 
         # Generate short-term memory
-        content = await self._memory_summarizer.summarize(
+        result = await self._memory_summarizer.summarize(
             context=context,
             scope=MemoryScope.THREAD,
             memory_type=MemoryType.SHORT_TERM,
         )
+        log_llm_metrics(f"summarize(thread/{thread_ts})", result.metrics)
 
-        if content:
+        if result.text:
             await self._save_memory(
                 MemoryScope.THREAD,
                 scope_id,
                 MemoryType.SHORT_TERM,
-                content,
+                result.text,
                 source_message_count=len(messages),
                 source_latest_message_ts=latest_message_ts,
             )
@@ -358,23 +364,24 @@ class GenerateMemoryUseCase:
         )
 
         # Generate short-term memory
-        content = await self._memory_summarizer.summarize(
+        result = await self._memory_summarizer.summarize(
             context=context,
             scope=MemoryScope.CHANNEL,
             memory_type=MemoryType.SHORT_TERM,
         )
+        log_llm_metrics(f"summarize(channel/{channel.id}/short_term)", result.metrics)
 
-        if content:
+        if result.text:
             await self._save_memory(
                 MemoryScope.CHANNEL,
                 channel.id,
                 MemoryType.SHORT_TERM,
-                content,
+                result.text,
                 source_message_count=len(messages),
                 source_latest_message_ts=latest_message_ts,
             )
 
-        return content or None, True
+        return result.text or None, True
 
     async def _generate_channel_long_term_memory(
         self,
@@ -429,22 +436,23 @@ class GenerateMemoryUseCase:
         )
 
         # Generate long-term memory
-        content = await self._memory_summarizer.summarize(
+        result = await self._memory_summarizer.summarize(
             context=context,
             scope=MemoryScope.CHANNEL,
             memory_type=MemoryType.LONG_TERM,
             existing_memory=existing_content,
         )
+        log_llm_metrics(f"summarize(channel/{channel.id}/long_term)", result.metrics)
 
-        if content:
+        if result.text:
             await self._save_memory(
                 MemoryScope.CHANNEL,
                 channel.id,
                 MemoryType.LONG_TERM,
-                content,
+                result.text,
             )
 
-        return content or None
+        return result.text or None
 
     async def _get_active_threads(self, channel_id: str) -> list[str]:
         """Get active threads in a channel.

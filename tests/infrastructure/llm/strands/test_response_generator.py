@@ -43,7 +43,8 @@ class TestStrandsResponseGenerator:
 
             result = await generator.generate(context=sample_context)
 
-            assert result == "Hello! Nice to meet you."
+            assert result.text == "Hello! Nice to meet you."
+            assert result.metrics is not None
             mock_agent.invoke_async.assert_awaited_once()
 
     async def test_generate_top_level_reply(
@@ -87,7 +88,7 @@ class TestStrandsResponseGenerator:
 
             result = await generator.generate(context=context)
 
-            assert result == "Hello!"
+            assert result.text == "Hello!"
             # Check that query prompt contains top-level instruction
             call_args = mock_agent.invoke_async.call_args
             query_prompt = call_args.args[0]
@@ -149,7 +150,7 @@ class TestStrandsResponseGenerator:
 
             result = await generator.generate(context=context)
 
-            assert result == "Thread response!"
+            assert result.text == "Thread response!"
             # Check that query prompt contains thread instruction
             call_args = mock_agent.invoke_async.call_args
             query_prompt = call_args.args[0]
@@ -342,12 +343,11 @@ class TestBuildQueryPrompt:
 
         result = generator.build_query_prompt(context)
 
-        # Should include memory section
-        assert "## 記憶" in result
-        assert "### ワークスペースの歴史" in result
+        # Should include workspace long-term memory section
+        assert "## ワークスペースの概要" in result
         assert "Workspace history content." in result
-        assert "### ワークスペースの最近の出来事" in result
-        assert "Workspace recent content." in result
+        # Short-term memory should NOT be included
+        assert "Workspace recent content." not in result
 
     def test_build_query_prompt_with_channel_memories(
         self,
@@ -382,18 +382,16 @@ class TestBuildQueryPrompt:
 
         result = generator.build_query_prompt(context)
 
-        # Should include channel info section
-        assert "## チャンネル情報" in result
-        assert "あなたが参加しているチャンネルは以下です" in result
-        assert "- #general" in result
-        assert "- #random" in result
-        # Should include channel memories
-        assert "## 各チャンネルの記憶" in result
+        # Should include channel short-term memories only
+        assert "## 各チャンネルの最近の出来事" in result
         assert "### #general" in result
-        assert "General channel history." in result
         assert "Recent events in general." in result
-        assert "### #random" in result
-        assert "Random channel history." in result
+        # Long-term memory should NOT be included
+        assert "General channel history." not in result
+        # Channel without short-term memory should not appear
+        assert "### #random" not in result
+        # Channel info section should NOT be included
+        assert "## チャンネル情報" not in result
 
     def test_build_query_prompt_top_level_reply(
         self,

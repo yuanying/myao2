@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
 from myao2.config.models import PersonaConfig
 from myao2.domain.entities import Channel, Context, Message, User
 from myao2.domain.entities.channel_messages import ChannelMemory, ChannelMessages
+from myao2.domain.entities.llm_metrics import LLMMetrics
 from myao2.domain.entities.memory import (
     MemoryScope,
     MemoryType,
@@ -17,8 +19,31 @@ from myao2.domain.repositories.channel_repository import ChannelRepository
 from myao2.domain.repositories.memory_repository import MemoryRepository
 from myao2.domain.repositories.message_repository import MessageRepository
 
+logger = logging.getLogger(__name__)
+
 WORKSPACE_SCOPE_ID = "default"
 DEFAULT_MESSAGE_LIMIT = 20
+
+
+def log_llm_metrics(operation: str, metrics: LLMMetrics | None) -> None:
+    """Log LLM metrics.
+
+    Args:
+        operation: Name of the LLM operation (e.g., "generate", "judge", "summarize").
+        metrics: LLM metrics from the result, or None if unavailable.
+    """
+    if metrics is None:
+        logger.info("LLM %s completed (metrics unavailable)", operation)
+        return
+
+    logger.info(
+        "LLM %s completed: tokens=%d (in=%d, out=%d), duration=%.2fs",
+        operation,
+        metrics.total_tokens,
+        metrics.input_tokens,
+        metrics.output_tokens,
+        metrics.total_duration,
+    )
 
 
 def build_channel_messages(

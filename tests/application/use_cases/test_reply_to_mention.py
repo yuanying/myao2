@@ -7,7 +7,7 @@ import pytest
 
 from myao2.application.use_cases import ReplyToMentionUseCase
 from myao2.config import PersonaConfig
-from myao2.domain.entities import Channel, Context, Message, User
+from myao2.domain.entities import Channel, Context, GenerationResult, Message, User
 from myao2.domain.entities.channel_messages import ChannelMessages
 
 
@@ -29,7 +29,9 @@ def mock_messaging_service() -> Mock:
 def mock_response_generator() -> Mock:
     """Create mock response generator."""
     generator = Mock()
-    generator.generate = AsyncMock(return_value="Nice to meet you!")
+    generator.generate = AsyncMock(
+        return_value=GenerationResult(text="Nice to meet you!")
+    )
     return generator
 
 

@@ -3,6 +3,7 @@
 from myao2.application.use_cases.helpers import (
     build_context_with_memory,
     create_bot_message,
+    log_llm_metrics,
 )
 from myao2.config import PersonaConfig
 from myao2.domain.entities import Message
@@ -87,17 +88,18 @@ class ReplyToMentionUseCase:
         )
 
         # 5. Generate response with context
-        response_text = await self._response_generator.generate(context=context)
+        result = await self._response_generator.generate(context=context)
+        log_llm_metrics("generate", result.metrics)
 
         # 6. Send response
         await self._messaging_service.send_message(
             channel_id=message.channel.id,
-            text=response_text,
+            text=result.text,
             thread_ts=message.thread_ts,
         )
 
         # 7. Save response message
         bot_message = create_bot_message(
-            response_text, message, self._bot_user_id, self._persona.name
+            result.text, message, self._bot_user_id, self._persona.name
         )
         await self._message_repository.save(bot_message)
