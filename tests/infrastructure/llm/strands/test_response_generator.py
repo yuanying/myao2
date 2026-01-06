@@ -1,14 +1,17 @@
 """Tests for StrandsResponseGenerator."""
 
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from uuid import uuid4
 
 import pytest
 
 from myao2.config.models import AgentConfig, PersonaConfig
 from myao2.domain.entities import Channel, Context, Message, User
 from myao2.domain.entities.channel_messages import ChannelMemory, ChannelMessages
+from myao2.domain.entities.memo import Memo
 from myao2.infrastructure.llm.exceptions import LLMError
+from myao2.infrastructure.llm.strands.memo_tools import MemoToolsFactory
 from myao2.infrastructure.llm.strands.response_generator import StrandsResponseGenerator
 
 
@@ -489,3 +492,109 @@ class TestBuildQueryPrompt:
         assert "Top level" in result
         # Should include instruction for thread reply
         assert "返信対象スレッドに返答してください" in result
+
+
+def create_test_memo(
+    content: str = "Test memo",
+    priority: int = 3,
+    tags: list[str] | None = None,
+    detail: str | None = None,
+) -> Memo:
+    """Create a test Memo instance."""
+    now = datetime.now(timezone.utc)
+    return Memo(
+        id=uuid4(),
+        content=content,
+        priority=priority,
+        tags=tags or [],
+        detail=detail,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.fixture
+def mock_memo_tools_factory() -> Mock:
+    """Create mock MemoToolsFactory."""
+    factory = Mock(spec=MemoToolsFactory)
+    factory.tools = [Mock(), Mock()]  # 2 mock tools
+    factory.get_invocation_state.return_value = {"memo_repository": Mock()}
+    return factory
+
+
+class TestStrandsResponseGeneratorWithTools:
+    """Tests for StrandsResponseGenerator with tool integration."""
+
+    async def test_generate_without_tools(
+        self,
+        mock_model: MagicMock,
+        sample_context: Context,
+    ) -> None:
+        """Test generation without memo tools."""
+        generator = StrandsResponseGenerator(model=mock_model)
+
+        with patch(
+            "myao2.infrastructure.llm.strands.response_generator.Agent"
+        ) as mock_agent_class:
+            mock_agent = MagicMock()
+            mock_agent.invoke_async = AsyncMock(return_value="Response")
+            mock_agent_class.return_value = mock_agent
+
+            result = await generator.generate(context=sample_context)
+
+            assert result.text == "Response"
+            # Agent should be created without tools
+            call_kwargs = mock_agent_class.call_args.kwargs
+            assert "tools" not in call_kwargs or call_kwargs.get("tools") == []
+
+    async def test_generate_with_memo_tools(
+        self,
+        mock_model: MagicMock,
+        sample_context: Context,
+        mock_memo_tools_factory: Mock,
+    ) -> None:
+        """Test generation with memo tools."""
+        generator = StrandsResponseGenerator(
+            model=mock_model,
+            memo_tools_factory=mock_memo_tools_factory,
+        )
+
+        with patch(
+            "myao2.infrastructure.llm.strands.response_generator.Agent"
+        ) as mock_agent_class:
+            mock_agent = MagicMock()
+            mock_agent.invoke_async = AsyncMock(return_value="Response with tools")
+            mock_agent_class.return_value = mock_agent
+
+            result = await generator.generate(context=sample_context)
+
+            assert result.text == "Response with tools"
+            # Agent should be created with tools
+            call_kwargs = mock_agent_class.call_args.kwargs
+            assert call_kwargs["tools"] == mock_memo_tools_factory.tools
+
+    async def test_agent_receives_invocation_state(
+        self,
+        mock_model: MagicMock,
+        sample_context: Context,
+        mock_memo_tools_factory: Mock,
+    ) -> None:
+        """Test that Agent.invoke_async receives invocation_state."""
+        generator = StrandsResponseGenerator(
+            model=mock_model,
+            memo_tools_factory=mock_memo_tools_factory,
+        )
+
+        with patch(
+            "myao2.infrastructure.llm.strands.response_generator.Agent"
+        ) as mock_agent_class:
+            mock_agent = MagicMock()
+            mock_agent.invoke_async = AsyncMock(return_value="Response")
+            mock_agent_class.return_value = mock_agent
+
+            await generator.generate(context=sample_context)
+
+            # invoke_async should be called with invocation_state as kwargs
+            mock_agent.invoke_async.assert_awaited_once()
+            call_kwargs = mock_agent.invoke_async.call_args.kwargs
+            assert "memo_repository" in call_kwargs

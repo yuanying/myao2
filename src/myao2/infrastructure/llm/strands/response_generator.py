@@ -1,5 +1,9 @@
 """StrandsResponseGenerator implementation."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from strands import Agent
 from strands.models.litellm import LiteLLMModel
 
@@ -7,6 +11,9 @@ from myao2.config.models import AgentConfig
 from myao2.domain.entities import Context, GenerationResult, LLMMetrics
 from myao2.infrastructure.llm.strands.exceptions import map_strands_exception
 from myao2.infrastructure.llm.templates import create_jinja_env, format_timestamp
+
+if TYPE_CHECKING:
+    from myao2.infrastructure.llm.strands.memo_tools import MemoToolsFactory
 
 
 class StrandsResponseGenerator:
@@ -21,15 +28,18 @@ class StrandsResponseGenerator:
         self,
         model: LiteLLMModel,
         agent_config: AgentConfig | None = None,
+        memo_tools_factory: MemoToolsFactory | None = None,
     ) -> None:
         """Initialize the generator.
 
         Args:
             model: LiteLLMModel instance to be reused across requests.
             agent_config: Agent configuration with optional system_prompt.
+            memo_tools_factory: Factory for memo tools (optional).
         """
         self._model = model
         self._agent_config = agent_config
+        self._memo_tools_factory = memo_tools_factory
         self._jinja_env = create_jinja_env()
         self._jinja_env.filters["format_timestamp"] = format_timestamp
         self._system_template = self._jinja_env.get_template("response_system.j2")
@@ -51,11 +61,18 @@ class StrandsResponseGenerator:
         system_prompt = self.build_system_prompt(context)
         query_prompt = self.build_query_prompt(context)
 
+        # Configure tools if memo_tools_factory is available
+        tools: list = []
+        invocation_state: dict = {}
+        if self._memo_tools_factory:
+            tools = self._memo_tools_factory.tools
+            invocation_state = self._memo_tools_factory.get_invocation_state()
+
         # Create Agent per request since system_prompt is dynamic
-        agent = Agent(model=self._model, system_prompt=system_prompt)
+        agent = Agent(model=self._model, system_prompt=system_prompt, tools=tools)
 
         try:
-            result = await agent.invoke_async(query_prompt)
+            result = await agent.invoke_async(query_prompt, **invocation_state)
             metrics = LLMMetrics.from_strands_result(result)
             return GenerationResult(text=str(result), metrics=metrics)
         except Exception as e:
