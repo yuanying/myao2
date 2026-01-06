@@ -433,17 +433,21 @@ class TestStrandsMemorySummarizer:
 class TestBuildSystemPrompt:
     """Tests for StrandsMemorySummarizer.build_system_prompt method."""
 
-    def test_includes_persona_system_prompt(
+    def test_includes_memory_generation_instruction(
         self,
         summarizer: StrandsMemorySummarizer,
         sample_context: Context,
     ) -> None:
-        """Test that system prompt contains persona's system prompt."""
+        """Test that system prompt contains memory generation instruction."""
         result = summarizer.build_system_prompt(
             sample_context, MemoryScope.THREAD, MemoryType.SHORT_TERM
         )
 
-        assert "You are a friendly bot." in result
+        # Should include memory generation instruction instead of persona
+        assert "あなたは自分自身の記憶を生成しています" in result
+        assert "短期記憶" in result
+        # Should NOT include persona system prompt
+        assert "You are a friendly bot." not in result
 
     def test_includes_agent_system_prompt(
         self,
@@ -466,7 +470,9 @@ class TestBuildSystemPrompt:
             sample_context, MemoryScope.THREAD, MemoryType.SHORT_TERM
         )
 
-        assert "You are a friendly bot." in result
+        # Should NOT include persona system prompt
+        assert "You are a friendly bot." not in result
+        # Should include agent system prompt
         assert "Additional memory instructions." in result
 
     def test_includes_memory_type_long_term_guidelines(
@@ -534,13 +540,15 @@ class TestBuildSystemPrompt:
         summarizer: StrandsMemorySummarizer,
         sample_context: Context,
     ) -> None:
-        """Test system prompt includes basic summarization rules."""
+        """Test system prompt includes basic memory generation rules."""
         result = summarizer.build_system_prompt(
             sample_context, MemoryScope.THREAD, MemoryType.SHORT_TERM
         )
 
-        assert "要約" in result
+        assert "記憶" in result
         assert "箇条書き" in result
+        # Should include date/time requirement
+        assert "日付" in result
 
 
 class TestBuildQueryPrompt:
