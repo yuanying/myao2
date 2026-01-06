@@ -1,12 +1,14 @@
 """Tests for Context entity."""
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 
 from myao2.config.models import PersonaConfig
 from myao2.domain.entities import Channel, Context, Message, User
 from myao2.domain.entities.channel_messages import ChannelMemory, ChannelMessages
+from myao2.domain.entities.memo import Memo
 
 
 @pytest.fixture
@@ -439,3 +441,144 @@ class TestThreadMemories:
         )
         assert context.thread_memories["1234567891.000000"] == "Feature design summary"
         assert context.thread_memories["1234567892.000000"] == "Code review summary"
+
+
+def create_test_memo(
+    content: str = "Test memo",
+    priority: int = 3,
+    tags: list[str] | None = None,
+    detail: str | None = None,
+) -> Memo:
+    """Create a test Memo instance."""
+    now = datetime.now(timezone.utc)
+    return Memo(
+        id=uuid4(),
+        content=content,
+        priority=priority,
+        tags=tags or [],
+        detail=detail,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+class TestContextMemoFields:
+    """Tests for Context memo fields."""
+
+    def test_high_priority_memos_default_empty_list(
+        self,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that high_priority_memos defaults to empty list."""
+        channel_messages = create_empty_channel_messages()
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+        )
+        assert context.high_priority_memos == []
+
+    def test_recent_memos_default_empty_list(
+        self,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that recent_memos defaults to empty list."""
+        channel_messages = create_empty_channel_messages()
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+        )
+        assert context.recent_memos == []
+
+    def test_creates_with_high_priority_memos(
+        self,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that Context can be created with high_priority_memos."""
+        channel_messages = create_empty_channel_messages()
+        memos = [
+            create_test_memo("Important user info", priority=5, tags=["user"]),
+            create_test_memo("Another important memo", priority=4, tags=["schedule"]),
+        ]
+
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            high_priority_memos=memos,
+        )
+
+        assert len(context.high_priority_memos) == 2
+        assert context.high_priority_memos[0].content == "Important user info"
+        assert context.high_priority_memos[1].priority == 4
+
+    def test_creates_with_recent_memos(
+        self,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that Context can be created with recent_memos."""
+        channel_messages = create_empty_channel_messages()
+        memos = [
+            create_test_memo("Recent memo 1", priority=3),
+            create_test_memo("Recent memo 2", priority=2),
+        ]
+
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            recent_memos=memos,
+        )
+
+        assert len(context.recent_memos) == 2
+        assert context.recent_memos[0].content == "Recent memo 1"
+
+    def test_creates_with_both_memo_fields(
+        self,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that Context can be created with both memo fields."""
+        channel_messages = create_empty_channel_messages()
+        high_priority = [
+            create_test_memo("Important", priority=5),
+        ]
+        recent = [
+            create_test_memo("Recent", priority=3),
+        ]
+
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            high_priority_memos=high_priority,
+            recent_memos=recent,
+        )
+
+        assert len(context.high_priority_memos) == 1
+        assert len(context.recent_memos) == 1
+        assert context.high_priority_memos[0].priority == 5
+        assert context.recent_memos[0].priority == 3
+
+    def test_cannot_modify_high_priority_memos_attribute(
+        self,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that high_priority_memos attribute cannot be replaced."""
+        channel_messages = create_empty_channel_messages()
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+        )
+
+        with pytest.raises(AttributeError):
+            context.high_priority_memos = []  # type: ignore[misc]
+
+    def test_cannot_modify_recent_memos_attribute(
+        self,
+        persona_config: PersonaConfig,
+    ) -> None:
+        """Test that recent_memos attribute cannot be replaced."""
+        channel_messages = create_empty_channel_messages()
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+        )
+
+        with pytest.raises(AttributeError):
+            context.recent_memos = []  # type: ignore[misc]

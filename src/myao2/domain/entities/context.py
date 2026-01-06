@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from myao2.config.models import PersonaConfig
 from myao2.domain.entities.channel_messages import ChannelMemory, ChannelMessages
+from myao2.domain.entities.memo import Memo
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,8 @@ class Context:
         channel_memories: Active channel memories (channel_id -> ChannelMemory).
         thread_memories: Recent thread summaries (thread_ts -> memory).
         target_thread_ts: Target thread timestamp (None for top-level).
+        high_priority_memos: High priority memos (priority >= 4, max 20).
+        recent_memos: Recent memos (max 5, excluding high_priority_memos).
     """
 
     persona: PersonaConfig
@@ -31,3 +34,5 @@ class Context:
     channel_memories: dict[str, ChannelMemory] = field(default_factory=dict)
     thread_memories: dict[str, str] = field(default_factory=dict)
     target_thread_ts: str | None = None
+    high_priority_memos: list[Memo] = field(default_factory=list)
+    recent_memos: list[Memo] = field(default_factory=list)
