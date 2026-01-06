@@ -7,6 +7,7 @@ from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
 from myao2.domain.entities.llm_metrics import LLMMetrics
 from myao2.domain.entities.llm_result import GenerationResult, SummarizationResult
+from myao2.domain.entities.memo import Memo, TagStats, create_memo
 from myao2.domain.entities.memory import (
     Memory,
     MemoryScope,
@@ -27,12 +28,15 @@ __all__ = [
     "JudgmentCache",
     "JudgmentResult",
     "LLMMetrics",
+    "Memo",
     "Memory",
     "MemoryScope",
     "MemoryType",
     "Message",
     "SummarizationResult",
+    "TagStats",
     "User",
+    "create_memo",
     "create_memory",
     "make_thread_scope_id",
     "parse_thread_scope_id",
