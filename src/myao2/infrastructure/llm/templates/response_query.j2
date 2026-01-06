@@ -5,47 +5,19 @@
 
     {% endfor %}
 {% endmacro %}
-{% if workspace_long_term_memory or workspace_short_term_memory %}
-## 記憶
-
-    {% if workspace_long_term_memory %}
-### ワークスペースの歴史
+{% if workspace_long_term_memory %}
+## ワークスペースの概要
 {{ workspace_long_term_memory }}
 
-    {% endif %}
-    {% if workspace_short_term_memory %}
-### ワークスペースの最近の出来事
-{{ workspace_short_term_memory }}
-
-    {% endif %}
 {% endif %}
 {% if channel_memories %}
-## チャンネル情報
-
-あなたが参加しているチャンネルは以下です。
+## 各チャンネルの最近の出来事
 
     {% for channel in channel_memories.values() %}
-- #{{ channel.channel_name }}
-    {% endfor %}
-
-現在、あなたは #{{ current_channel_name }} にいます。
-
-## 各チャンネルの記憶
-
-    {% for channel in channel_memories.values() %}
-        {% if channel.long_term_memory or channel.short_term_memory %}
+        {% if channel.short_term_memory %}
 ### #{{ channel.channel_name }}
-
-            {% if channel.long_term_memory %}
-#### 歴史
-{{ channel.long_term_memory }}
-
-            {% endif %}
-            {% if channel.short_term_memory %}
-#### 最近の出来事
 {{ channel.short_term_memory }}
 
-            {% endif %}
         {% endif %}
     {% endfor %}
 {% endif %}
