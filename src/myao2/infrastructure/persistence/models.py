@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import JSON, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -90,3 +90,17 @@ class MemoryModel(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("scope", "scope_id", "memory_type", name="uq_scope_type"),
     )
+
+
+class MemoModel(SQLModel, table=True):
+    """メモテーブル"""
+
+    __tablename__ = "memos"
+
+    id: str = Field(primary_key=True)  # UUID を文字列として保存
+    content: str
+    priority: int = Field(index=True)
+    tags: list[str] = Field(default_factory=list, sa_type=JSON)  # SQLite JSON型
+    detail: str | None = Field(default=None)
+    created_at: datetime
+    updated_at: datetime = Field(index=True)
