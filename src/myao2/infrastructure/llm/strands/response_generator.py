@@ -122,4 +122,6 @@ class StrandsResponseGenerator:
             thread_messages=channel_messages.thread_messages,
             target_thread_ts=context.target_thread_ts,
             target_thread_messages=target_thread_messages,
+            high_priority_memos=context.high_priority_memos,
+            recent_memos=context.recent_memos,
         )

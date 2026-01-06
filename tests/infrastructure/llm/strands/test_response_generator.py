@@ -598,3 +598,177 @@ class TestStrandsResponseGeneratorWithTools:
             mock_agent.invoke_async.assert_awaited_once()
             call_kwargs = mock_agent.invoke_async.call_args.kwargs
             assert "memo_repository" in call_kwargs
+
+
+class TestBuildQueryPromptWithMemos:
+    """Tests for build_query_prompt with memo fields."""
+
+    def test_build_query_prompt_without_memos(
+        self,
+        generator: StrandsResponseGenerator,
+        persona_config: PersonaConfig,
+        sample_channel: Channel,
+    ) -> None:
+        """Test query prompt without memos (section still displayed for guidelines)."""
+        channel_messages = ChannelMessages(
+            channel_id=sample_channel.id,
+            channel_name=sample_channel.name,
+        )
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+        )
+
+        result = generator.build_query_prompt(context)
+
+        # Should ALWAYS include memo section for guidelines (even without memos)
+        assert "## メモ管理" in result
+        assert "### メモ管理ガイドライン" in result
+        # But should NOT include specific memo lists
+        assert "### 重要なメモ（優先度4以上）" not in result
+        assert "### 直近のメモ" not in result
+
+    def test_build_query_prompt_with_high_priority_memos_only(
+        self,
+        generator: StrandsResponseGenerator,
+        persona_config: PersonaConfig,
+        sample_channel: Channel,
+    ) -> None:
+        """Test query prompt with high priority memos only."""
+        channel_messages = ChannelMessages(
+            channel_id=sample_channel.id,
+            channel_name=sample_channel.name,
+        )
+        memos = [
+            create_test_memo("Important memo content", priority=5, tags=["user"]),
+        ]
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            high_priority_memos=memos,
+        )
+
+        result = generator.build_query_prompt(context)
+
+        # Should include memo section
+        assert "## メモ管理" in result
+        assert "### 重要なメモ（優先度4以上）" in result
+        assert "Important memo content" in result
+        assert "優先度: 5" in result
+        assert "タグ: user" in result
+
+    def test_build_query_prompt_with_recent_memos_only(
+        self,
+        generator: StrandsResponseGenerator,
+        persona_config: PersonaConfig,
+        sample_channel: Channel,
+    ) -> None:
+        """Test query prompt with recent memos only."""
+        channel_messages = ChannelMessages(
+            channel_id=sample_channel.id,
+            channel_name=sample_channel.name,
+        )
+        memos = [
+            create_test_memo("Recent memo content", priority=3),
+        ]
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            recent_memos=memos,
+        )
+
+        result = generator.build_query_prompt(context)
+
+        # Should include memo section
+        assert "## メモ管理" in result
+        assert "### 直近のメモ" in result
+        assert "Recent memo content" in result
+
+    def test_build_query_prompt_with_both_memos(
+        self,
+        generator: StrandsResponseGenerator,
+        persona_config: PersonaConfig,
+        sample_channel: Channel,
+    ) -> None:
+        """Test query prompt with both high priority and recent memos."""
+        channel_messages = ChannelMessages(
+            channel_id=sample_channel.id,
+            channel_name=sample_channel.name,
+        )
+        high_priority = [
+            create_test_memo("High priority memo", priority=5, tags=["important"]),
+        ]
+        recent = [
+            create_test_memo("Recent memo", priority=3),
+        ]
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            high_priority_memos=high_priority,
+            recent_memos=recent,
+        )
+
+        result = generator.build_query_prompt(context)
+
+        # Should include both sections
+        assert "### 重要なメモ（優先度4以上）" in result
+        assert "### 直近のメモ" in result
+        assert "High priority memo" in result
+        assert "Recent memo" in result
+
+    def test_build_query_prompt_shows_detail_marker(
+        self,
+        generator: StrandsResponseGenerator,
+        persona_config: PersonaConfig,
+        sample_channel: Channel,
+    ) -> None:
+        """Test that detail marker is shown for memos with details."""
+        channel_messages = ChannelMessages(
+            channel_id=sample_channel.id,
+            channel_name=sample_channel.name,
+        )
+        memos = [
+            create_test_memo(
+                "Memo with detail",
+                priority=5,
+                detail="This is the detailed content",
+            ),
+        ]
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            high_priority_memos=memos,
+        )
+
+        result = generator.build_query_prompt(context)
+
+        # Should show detail marker
+        assert "[詳細あり]" in result
+
+    def test_build_query_prompt_includes_guidelines(
+        self,
+        generator: StrandsResponseGenerator,
+        persona_config: PersonaConfig,
+        sample_channel: Channel,
+    ) -> None:
+        """Test that memo guidelines are included."""
+        channel_messages = ChannelMessages(
+            channel_id=sample_channel.id,
+            channel_name=sample_channel.name,
+        )
+        memos = [
+            create_test_memo("Test memo", priority=5),
+        ]
+        context = Context(
+            persona=persona_config,
+            conversation_history=channel_messages,
+            high_priority_memos=memos,
+        )
+
+        result = generator.build_query_prompt(context)
+
+        # Should include guidelines
+        assert "### メモ管理ガイドライン" in result
+        assert "いつメモすべきか" in result
+        assert "優先度の付け方" in result
+        assert "主語を明記" in result
