@@ -51,6 +51,8 @@ def load_dotenv(env_path: Path) -> None:
                     os.environ[key] = value
 
 
+from strands import Agent  # noqa: E402
+
 from myao2.application.use_cases.helpers import (  # noqa: E402
     WORKSPACE_SCOPE_ID,
     build_context_with_memory,
@@ -63,6 +65,7 @@ from myao2.infrastructure.llm.strands import (  # noqa: E402
     StrandsResponseJudgment,
     create_model,
 )
+from myao2.infrastructure.llm.strands.models import JudgmentOutput  # noqa: E402
 from myao2.infrastructure.persistence import (  # noqa: E402
     DatabaseManager,
     SQLiteChannelRepository,
@@ -90,6 +93,48 @@ def print_response(title: str, response: str | dict) -> None:
     else:
         print(response)
     print("-" * 60 + "\n")
+
+
+def print_metrics(result) -> None:
+    """Agentのメトリクスを整形して出力"""
+    try:
+        metrics = result.metrics.get_summary()
+    except Exception:
+        print("(Metrics not available)")
+        return
+
+    print("\n" + "+" * 60)
+    print("  Metrics")
+    print("+" * 60)
+
+    # Token usage
+    usage = metrics.get("accumulated_usage", {})
+    print(f"  Input tokens:  {usage.get('inputTokens', 'N/A'):>8}")
+    print(f"  Output tokens: {usage.get('outputTokens', 'N/A'):>8}")
+    print(f"  Total tokens:  {usage.get('totalTokens', 'N/A'):>8}")
+
+    # Performance
+    print(f"  Total cycles:  {metrics.get('total_cycles', 'N/A'):>8}")
+    print(f"  Duration:      {metrics.get('total_duration', 0):.2f}s")
+
+    # Latency
+    acc_metrics = metrics.get("accumulated_metrics", {})
+    latency_ms = acc_metrics.get("latencyMs")
+    if latency_ms:
+        print(f"  Latency:       {latency_ms:>8}ms")
+
+    # Tool usage
+    tool_usage = metrics.get("tool_usage", {})
+    if tool_usage:
+        print("\n  Tool Usage:")
+        for tool_name, stats in tool_usage.items():
+            exec_stats = stats.get("execution_stats", {})
+            print(f"    - {tool_name}:")
+            print(f"        Calls: {exec_stats.get('call_count', 0)}")
+            print(f"        Success rate: {exec_stats.get('success_rate', 0):.1%}")
+            print(f"        Avg time: {exec_stats.get('average_time', 0):.3f}s")
+
+    print("+" * 60 + "\n")
 
 
 async def resolve_channel(
@@ -178,8 +223,11 @@ async def run_generate(
 
     if not args.dry_run:
         print("Calling LLM...")
-        response = await generator.generate(context)
-        print_response("Generated Response", response)
+        # Use Agent directly to access metrics
+        agent = Agent(model=response_model, system_prompt=system_prompt)
+        result = await agent.invoke_async(query_prompt)
+        print_response("Generated Response", str(result))
+        print_metrics(result)
 
 
 async def run_judgment(
@@ -223,15 +271,22 @@ async def run_judgment(
 
     if not args.dry_run:
         print("Calling LLM...")
-        result = await judgment.judge(context)
+        # Use Agent directly to access metrics
+        agent = Agent(model=judgment_model, system_prompt=system_prompt)
+        result = await agent.invoke_async(
+            query_prompt,
+            structured_output_model=JudgmentOutput,
+        )
+        output = result.structured_output
         print_response(
             "Judgment Result",
             {
-                "should_respond": result.should_respond,
-                "reason": result.reason,
-                "confidence": result.confidence,
+                "should_respond": output.should_respond,
+                "reason": output.reason,
+                "confidence": output.confidence,
             },
         )
+        print_metrics(result)
 
 
 async def run_summarize(
@@ -317,10 +372,11 @@ async def run_summarize(
 
     if not args.dry_run:
         print("Calling LLM...")
-        result = await summarizer.summarize(
-            context, scope, memory_type, existing_memory
-        )
-        print_response("Generated Memory", result)
+        # Use Agent directly to access metrics
+        agent = Agent(model=memory_model, system_prompt=system_prompt)
+        result = await agent.invoke_async(query_prompt)
+        print_response("Generated Memory", str(result))
+        print_metrics(result)
 
 
 def create_parser() -> argparse.ArgumentParser:
