@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
+from uuid import uuid4
 
 import pytest
 
@@ -9,6 +10,7 @@ from myao2.application.use_cases.helpers import (
     WORKSPACE_SCOPE_ID,
     build_channel_messages,
     build_context_with_memory,
+    get_memos_for_context,
 )
 from myao2.config import PersonaConfig
 from myao2.domain.entities import (
@@ -20,6 +22,7 @@ from myao2.domain.entities import (
     User,
 )
 from myao2.domain.entities.channel_messages import ChannelMessages
+from myao2.domain.entities.memo import Memo
 from myao2.domain.entities.memory import make_thread_scope_id
 
 
@@ -561,3 +564,131 @@ class TestBuildContextWithMemory:
             limit=20,
         )
         assert result.conversation_history.get_all_messages() == messages
+
+
+def create_test_memo(
+    content: str = "Test memo",
+    priority: int = 3,
+    tags: list[str] | None = None,
+    detail: str | None = None,
+) -> Memo:
+    """Create a test Memo instance."""
+    now = datetime.now(timezone.utc)
+    return Memo(
+        id=uuid4(),
+        content=content,
+        priority=priority,
+        tags=tags or [],
+        detail=detail,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.fixture
+def mock_memo_repository() -> Mock:
+    """Create mock memo repository."""
+    repo = Mock()
+    repo.find_by_priority_gte = AsyncMock(return_value=[])
+    repo.find_recent = AsyncMock(return_value=[])
+    return repo
+
+
+class TestGetMemosForContext:
+    """Tests for get_memos_for_context function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_lists_when_no_memos(
+        self,
+        mock_memo_repository: Mock,
+    ) -> None:
+        """Test returns empty lists when no memos exist."""
+        mock_memo_repository.find_by_priority_gte = AsyncMock(return_value=[])
+        mock_memo_repository.find_recent = AsyncMock(return_value=[])
+
+        high_priority, recent = await get_memos_for_context(mock_memo_repository)
+
+        assert high_priority == []
+        assert recent == []
+
+    @pytest.mark.asyncio
+    async def test_returns_high_priority_memos(
+        self,
+        mock_memo_repository: Mock,
+    ) -> None:
+        """Test returns high priority memos (priority >= 4)."""
+        memos = [
+            create_test_memo("Important", priority=5),
+            create_test_memo("Also important", priority=4),
+        ]
+        mock_memo_repository.find_by_priority_gte = AsyncMock(return_value=memos)
+
+        high_priority, recent = await get_memos_for_context(mock_memo_repository)
+
+        assert len(high_priority) == 2
+        assert high_priority[0].priority == 5
+        mock_memo_repository.find_by_priority_gte.assert_awaited_once_with(4, limit=20)
+
+    @pytest.mark.asyncio
+    async def test_returns_recent_memos_excluding_duplicates(
+        self,
+        mock_memo_repository: Mock,
+    ) -> None:
+        """Test recent memos excludes high priority memos."""
+        # Create memos with specific IDs for duplicate detection
+        high_priority_memo = create_test_memo("Important", priority=5)
+        recent_only_memo = create_test_memo("Recent only", priority=3)
+
+        mock_memo_repository.find_by_priority_gte = AsyncMock(
+            return_value=[high_priority_memo]
+        )
+        # Recent includes both the high priority memo and a new one
+        mock_memo_repository.find_recent = AsyncMock(
+            return_value=[high_priority_memo, recent_only_memo]
+        )
+
+        high_priority, recent = await get_memos_for_context(mock_memo_repository)
+
+        # High priority should have 1 memo
+        assert len(high_priority) == 1
+        # Recent should only have the non-duplicate memo
+        assert len(recent) == 1
+        assert recent[0].id == recent_only_memo.id
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_recent_when_all_are_high_priority(
+        self,
+        mock_memo_repository: Mock,
+    ) -> None:
+        """Test recent is empty when all recent memos are high priority."""
+        high_priority_memo = create_test_memo("Important", priority=5)
+
+        mock_memo_repository.find_by_priority_gte = AsyncMock(
+            return_value=[high_priority_memo]
+        )
+        mock_memo_repository.find_recent = AsyncMock(return_value=[high_priority_memo])
+
+        high_priority, recent = await get_memos_for_context(mock_memo_repository)
+
+        assert len(high_priority) == 1
+        assert recent == []
+
+    @pytest.mark.asyncio
+    async def test_high_priority_limit_is_20(
+        self,
+        mock_memo_repository: Mock,
+    ) -> None:
+        """Test high priority memo limit is 20."""
+        await get_memos_for_context(mock_memo_repository)
+
+        mock_memo_repository.find_by_priority_gte.assert_awaited_once_with(4, limit=20)
+
+    @pytest.mark.asyncio
+    async def test_recent_limit_is_5(
+        self,
+        mock_memo_repository: Mock,
+    ) -> None:
+        """Test recent memo limit is 5."""
+        await get_memos_for_context(mock_memo_repository)
+
+        mock_memo_repository.find_recent.assert_awaited_once_with(limit=5)
