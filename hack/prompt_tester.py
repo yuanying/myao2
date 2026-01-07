@@ -67,6 +67,7 @@ from myao2.infrastructure.llm.strands import (  # noqa: E402
 from myao2.infrastructure.persistence import (  # noqa: E402
     DatabaseManager,
     SQLiteChannelRepository,
+    SQLiteMemoRepository,
     SQLiteMemoryRepository,
     SQLiteMessageRepository,
 )
@@ -180,6 +181,7 @@ async def run_generate(
     message_repository: SQLiteMessageRepository,
     memory_repository: SQLiteMemoryRepository,
     channel_repository: SQLiteChannelRepository,
+    memo_repository: SQLiteMemoRepository,
 ) -> None:
     """generate サブコマンドを実行"""
     # チャネル解決
@@ -201,6 +203,7 @@ async def run_generate(
         persona=config.persona,
         channel=channel,
         target_thread_ts=args.thread,
+        memo_repository=memo_repository,
     )
 
     # Create model and generator
@@ -226,6 +229,7 @@ async def run_judgment(
     message_repository: SQLiteMessageRepository,
     memory_repository: SQLiteMemoryRepository,
     channel_repository: SQLiteChannelRepository,
+    memo_repository: SQLiteMemoRepository,
 ) -> None:
     """judgment サブコマンドを実行"""
     # チャネル解決
@@ -247,6 +251,7 @@ async def run_judgment(
         persona=config.persona,
         channel=channel,
         target_thread_ts=args.thread,
+        memo_repository=memo_repository,
     )
 
     # Create model and judgment
@@ -279,6 +284,7 @@ async def run_summarize(
     message_repository: SQLiteMessageRepository,
     memory_repository: SQLiteMemoryRepository,
     channel_repository: SQLiteChannelRepository,
+    memo_repository: SQLiteMemoRepository,
 ) -> None:
     """summarize サブコマンドを実行"""
     scope = MemoryScope(args.scope)
@@ -326,6 +332,7 @@ async def run_summarize(
         persona=config.persona,
         channel=channel,
         target_thread_ts=args.thread if scope == MemoryScope.THREAD else None,
+        memo_repository=memo_repository,
     )
 
     # 既存メモリの取得（長期記憶更新用）
@@ -455,6 +462,7 @@ async def main() -> None:
     message_repository = SQLiteMessageRepository(db_manager.get_session)
     memory_repository = SQLiteMemoryRepository(db_manager.get_session)
     channel_repository = SQLiteChannelRepository(db_manager.get_session)
+    memo_repository = SQLiteMemoRepository(db_manager.get_session)
 
     try:
         if args.command == "generate":
@@ -462,7 +470,12 @@ async def main() -> None:
                 print("Error: --channel is required for generate", file=sys.stderr)
                 sys.exit(1)
             await run_generate(
-                args, config, message_repository, memory_repository, channel_repository
+                args,
+                config,
+                message_repository,
+                memory_repository,
+                channel_repository,
+                memo_repository,
             )
 
         elif args.command == "judgment":
@@ -470,12 +483,22 @@ async def main() -> None:
                 print("Error: --channel is required for judgment", file=sys.stderr)
                 sys.exit(1)
             await run_judgment(
-                args, config, message_repository, memory_repository, channel_repository
+                args,
+                config,
+                message_repository,
+                memory_repository,
+                channel_repository,
+                memo_repository,
             )
 
         elif args.command == "summarize":
             await run_summarize(
-                args, config, message_repository, memory_repository, channel_repository
+                args,
+                config,
+                message_repository,
+                memory_repository,
+                channel_repository,
+                memo_repository,
             )
 
     finally:
