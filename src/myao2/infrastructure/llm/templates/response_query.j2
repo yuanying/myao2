@@ -1,5 +1,5 @@
 {% macro render_messages(messages) %}
-    {% for msg in messages %}
+    {% for msg in messages | reverse %}
 **{{ msg.timestamp | format_timestamp }}** {{ msg.user.name }}:
 {{ msg.text }}
 
