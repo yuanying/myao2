@@ -18,6 +18,7 @@ from myao2.infrastructure.llm.strands import (
     create_model,
 )
 from myao2.infrastructure.llm.strands.memo_tools import MemoToolsFactory
+from myao2.infrastructure.llm.strands.web_fetch_tools import WebFetchToolsFactory
 from myao2.infrastructure.persistence import (
     DatabaseManager,
     DBChannelMonitor,
@@ -136,9 +137,17 @@ async def main() -> None:
 
     # Create components
     memo_tools_factory = MemoToolsFactory(memo_repository=memo_repository)
+
+    # Create web_fetch_tools_factory if enabled
+    web_fetch_tools_factory: WebFetchToolsFactory | None = None
+    if config.tools and config.tools.web_fetch and config.tools.web_fetch.enabled:
+        web_fetch_tools_factory = WebFetchToolsFactory(config.tools.web_fetch)
+        logger.info("Web fetch tool enabled")
+
     response_generator = StrandsResponseGenerator(
         response_model,
         memo_tools_factory=memo_tools_factory,
+        web_fetch_tools_factory=web_fetch_tools_factory,
     )
 
     # Initialize use case for mention replies

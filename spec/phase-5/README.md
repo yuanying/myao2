@@ -21,6 +21,7 @@ Phase 4 で以下が実装済みであること：
 |---|------|-------|------|
 | 01 | メモ帳ツール | [01-memo-tool.md](./01-memo-tool.md) | LLMが自発的に重要情報を記憶するツール |
 | 02 | 動的待機時間 | [02-dynamic-wait.md](./02-dynamic-wait.md) | 活発なチャンネルでは応答待機時間を短縮 |
+| 03 | Web Fetch ツール | [03-web-fetch-tool.md](./03-web-fetch-tool.md) | 外部WebページをMarkdown形式で取得するツール |
 
 ---
 

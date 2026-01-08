@@ -116,6 +116,34 @@ class ResponseConfig:
 
 
 @dataclass
+class WebFetchConfig:
+    """Web Fetch ツール設定
+
+    Attributes:
+        enabled: ツール有効/無効
+        api_endpoint: Web Fetch API のエンドポイント
+        timeout_seconds: タイムアウト秒数
+        max_content_length: 取得コンテンツの最大文字数
+    """
+
+    api_endpoint: str
+    enabled: bool = True
+    timeout_seconds: int = 60
+    max_content_length: int = 20000
+
+
+@dataclass
+class ToolsConfig:
+    """ツール設定
+
+    Attributes:
+        web_fetch: Web Fetch ツール設定
+    """
+
+    web_fetch: WebFetchConfig | None = None
+
+
+@dataclass
 class Config:
     """アプリケーション設定"""
 
@@ -125,3 +153,4 @@ class Config:
     memory: MemoryConfig
     response: ResponseConfig
     logging: LoggingConfig | None = None
+    tools: ToolsConfig | None = None

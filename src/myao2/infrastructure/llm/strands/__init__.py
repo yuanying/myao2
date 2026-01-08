@@ -11,6 +11,11 @@ from myao2.infrastructure.llm.strands.memory_summarizer import StrandsMemorySumm
 from myao2.infrastructure.llm.strands.models import JudgmentOutput
 from myao2.infrastructure.llm.strands.response_generator import StrandsResponseGenerator
 from myao2.infrastructure.llm.strands.response_judgment import StrandsResponseJudgment
+from myao2.infrastructure.llm.strands.web_fetch_tools import (
+    WEB_FETCH_CONFIG_KEY,
+    WEB_FETCH_TOOLS,
+    WebFetchToolsFactory,
+)
 
 __all__ = [
     "JudgmentOutput",
@@ -20,6 +25,9 @@ __all__ = [
     "StrandsMemorySummarizer",
     "StrandsResponseGenerator",
     "StrandsResponseJudgment",
+    "WEB_FETCH_CONFIG_KEY",
+    "WEB_FETCH_TOOLS",
+    "WebFetchToolsFactory",
     "create_model",
     "map_strands_exception",
 ]
