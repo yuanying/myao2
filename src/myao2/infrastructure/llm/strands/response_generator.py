@@ -14,6 +14,7 @@ from myao2.infrastructure.llm.templates import create_jinja_env, format_timestam
 
 if TYPE_CHECKING:
     from myao2.infrastructure.llm.strands.memo_tools import MemoToolsFactory
+    from myao2.infrastructure.llm.strands.web_fetch_tools import WebFetchToolsFactory
 
 
 class StrandsResponseGenerator:
@@ -29,6 +30,7 @@ class StrandsResponseGenerator:
         model: LiteLLMModel,
         agent_config: AgentConfig | None = None,
         memo_tools_factory: MemoToolsFactory | None = None,
+        web_fetch_tools_factory: WebFetchToolsFactory | None = None,
     ) -> None:
         """Initialize the generator.
 
@@ -36,10 +38,12 @@ class StrandsResponseGenerator:
             model: LiteLLMModel instance to be reused across requests.
             agent_config: Agent configuration with optional system_prompt.
             memo_tools_factory: Factory for memo tools (optional).
+            web_fetch_tools_factory: Factory for web fetch tools (optional).
         """
         self._model = model
         self._agent_config = agent_config
         self._memo_tools_factory = memo_tools_factory
+        self._web_fetch_tools_factory = web_fetch_tools_factory
         self._jinja_env = create_jinja_env()
         self._jinja_env.filters["format_timestamp"] = format_timestamp
         self._system_template = self._jinja_env.get_template("response_system.j2")
@@ -61,12 +65,17 @@ class StrandsResponseGenerator:
         system_prompt = self.build_system_prompt(context)
         query_prompt = self.build_query_prompt(context)
 
-        # Configure tools if memo_tools_factory is available
+        # Configure tools from available factories
         tools: list = []
         invocation_state: dict = {}
         if self._memo_tools_factory:
-            tools = self._memo_tools_factory.tools
-            invocation_state = self._memo_tools_factory.get_invocation_state()
+            tools.extend(self._memo_tools_factory.tools)
+            invocation_state.update(self._memo_tools_factory.get_invocation_state())
+        if self._web_fetch_tools_factory:
+            tools.extend(self._web_fetch_tools_factory.tools)
+            invocation_state.update(
+                self._web_fetch_tools_factory.get_invocation_state()
+            )
 
         # Create Agent per request since system_prompt is dynamic
         agent = Agent(model=self._model, system_prompt=system_prompt, tools=tools)

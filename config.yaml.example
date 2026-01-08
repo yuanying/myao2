@@ -89,8 +89,10 @@ logging:
     # 例: 特定のモジュールをDEBUGレベルに
     # myao2.infrastructure.slack: DEBUG
 
-# 外部サービス設定
-external:
-  web_search:
-    enabled: false
-    # provider設定など
+# ツール設定
+tools:
+  web_fetch:
+    enabled: true
+    api_endpoint: ${WEB_FETCH_API_ENDPOINT}
+    timeout_seconds: 60        # タイムアウト秒数（デフォルト: 60）
+    max_content_length: 20000  # 取得コンテンツの最大文字数（デフォルト: 20000）

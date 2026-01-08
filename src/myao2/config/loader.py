@@ -18,6 +18,8 @@ from myao2.config.models import (
     ResponseConfig,
     ResponseIntervalConfig,
     SlackConfig,
+    ToolsConfig,
+    WebFetchConfig,
 )
 
 
@@ -236,6 +238,22 @@ def load_config(path: str | Path) -> Config:
             debug_llm_messages=logging_data.get("debug_llm_messages", False),
         )
 
+    # ToolsConfig (optional)
+    tools_config: ToolsConfig | None = None
+    tools_data = data.get("tools")
+    if tools_data:
+        web_fetch_config: WebFetchConfig | None = None
+        web_fetch_data = tools_data.get("web_fetch")
+        if web_fetch_data:
+            web_fetch_config = WebFetchConfig(
+                enabled=web_fetch_data.get("enabled", True),
+                api_endpoint=web_fetch_data.get("api_endpoint", ""),
+                timeout_seconds=web_fetch_data.get("timeout_seconds", 60),
+                max_content_length=web_fetch_data.get("max_content_length", 20000),
+            )
+
+        tools_config = ToolsConfig(web_fetch=web_fetch_config)
+
     return Config(
         slack=slack,
         agents=agents,
@@ -243,4 +261,5 @@ def load_config(path: str | Path) -> Config:
         memory=memory,
         response=response,
         logging=logging_config,
+        tools=tools_config,
     )
