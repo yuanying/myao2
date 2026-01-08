@@ -15,6 +15,7 @@ from myao2.infrastructure.llm.templates import create_jinja_env, format_timestam
 if TYPE_CHECKING:
     from myao2.infrastructure.llm.strands.memo_tools import MemoToolsFactory
     from myao2.infrastructure.llm.strands.web_fetch_tools import WebFetchToolsFactory
+    from myao2.infrastructure.llm.strands.web_search_tools import WebSearchToolsFactory
 
 
 class StrandsResponseGenerator:
@@ -31,6 +32,7 @@ class StrandsResponseGenerator:
         agent_config: AgentConfig | None = None,
         memo_tools_factory: MemoToolsFactory | None = None,
         web_fetch_tools_factory: WebFetchToolsFactory | None = None,
+        web_search_tools_factory: WebSearchToolsFactory | None = None,
     ) -> None:
         """Initialize the generator.
 
@@ -39,11 +41,13 @@ class StrandsResponseGenerator:
             agent_config: Agent configuration with optional system_prompt.
             memo_tools_factory: Factory for memo tools (optional).
             web_fetch_tools_factory: Factory for web fetch tools (optional).
+            web_search_tools_factory: Factory for web search tools (optional).
         """
         self._model = model
         self._agent_config = agent_config
         self._memo_tools_factory = memo_tools_factory
         self._web_fetch_tools_factory = web_fetch_tools_factory
+        self._web_search_tools_factory = web_search_tools_factory
         self._jinja_env = create_jinja_env()
         self._jinja_env.filters["format_timestamp"] = format_timestamp
         self._system_template = self._jinja_env.get_template("response_system.j2")
@@ -75,6 +79,11 @@ class StrandsResponseGenerator:
             tools.extend(self._web_fetch_tools_factory.tools)
             invocation_state.update(
                 self._web_fetch_tools_factory.get_invocation_state()
+            )
+        if self._web_search_tools_factory:
+            tools.extend(self._web_search_tools_factory.tools)
+            invocation_state.update(
+                self._web_search_tools_factory.get_invocation_state()
             )
 
         # Create Agent per request since system_prompt is dynamic

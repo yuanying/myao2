@@ -1,7 +1,7 @@
 """設定データクラス"""
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 
 @dataclass
@@ -133,14 +133,35 @@ class WebFetchConfig:
 
 
 @dataclass
+class WebSearchConfig:
+    """Web Search ツール設定
+
+    Attributes:
+        enabled: ツール有効/無効
+        api_key: Tavily API キー
+        search_depth: 検索深度（basic, advanced, fast, ultra-fast）
+        max_results: 検索結果の最大件数
+        max_content_length: 各結果のcontent最大文字数（0で無制限）
+    """
+
+    api_key: str
+    enabled: bool = True
+    search_depth: Literal["basic", "advanced", "fast", "ultra-fast"] = "basic"
+    max_results: int = 5
+    max_content_length: int = 500
+
+
+@dataclass
 class ToolsConfig:
     """ツール設定
 
     Attributes:
         web_fetch: Web Fetch ツール設定
+        web_search: Web Search ツール設定
     """
 
     web_fetch: WebFetchConfig | None = None
+    web_search: WebSearchConfig | None = None
 
 
 @dataclass

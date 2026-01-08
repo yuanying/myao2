@@ -16,6 +16,11 @@ from myao2.infrastructure.llm.strands.web_fetch_tools import (
     WEB_FETCH_TOOLS,
     WebFetchToolsFactory,
 )
+from myao2.infrastructure.llm.strands.web_search_tools import (
+    WEB_SEARCH_CONFIG_KEY,
+    WEB_SEARCH_TOOLS,
+    WebSearchToolsFactory,
+)
 
 __all__ = [
     "JudgmentOutput",
@@ -27,7 +32,10 @@ __all__ = [
     "StrandsResponseJudgment",
     "WEB_FETCH_CONFIG_KEY",
     "WEB_FETCH_TOOLS",
+    "WEB_SEARCH_CONFIG_KEY",
+    "WEB_SEARCH_TOOLS",
     "WebFetchToolsFactory",
+    "WebSearchToolsFactory",
     "create_model",
     "map_strands_exception",
 ]
