@@ -1,13 +1,16 @@
 """Reply to mention use case."""
 
+from datetime import datetime, timedelta, timezone
+
 from myao2.application.use_cases.helpers import (
     build_context_with_memory,
     create_bot_message,
     log_llm_metrics,
 )
 from myao2.config import PersonaConfig
-from myao2.domain.entities import Message
+from myao2.domain.entities import JudgmentCache, Message
 from myao2.domain.repositories import ChannelRepository, MessageRepository
+from myao2.domain.repositories.judgment_cache_repository import JudgmentCacheRepository
 from myao2.domain.repositories.memo_repository import MemoRepository
 from myao2.domain.repositories.memory_repository import MemoryRepository
 from myao2.domain.services import (
@@ -33,6 +36,7 @@ class ReplyToMentionUseCase:
         persona: PersonaConfig,
         bot_user_id: str,
         memo_repository: MemoRepository | None = None,
+        judgment_cache_repository: JudgmentCacheRepository | None = None,
     ) -> None:
         """Initialize the use case.
 
@@ -45,6 +49,7 @@ class ReplyToMentionUseCase:
             persona: Bot persona configuration.
             bot_user_id: The bot's user ID.
             memo_repository: Repository for memo access (optional).
+            judgment_cache_repository: Repository for judgment cache (optional).
         """
         self._messaging_service = messaging_service
         self._response_generator = response_generator
@@ -54,6 +59,7 @@ class ReplyToMentionUseCase:
         self._persona = persona
         self._bot_user_id = bot_user_id
         self._memo_repository = memo_repository
+        self._judgment_cache_repository = judgment_cache_repository
 
     async def execute(self, message: Message) -> None:
         """Execute the use case.
@@ -108,3 +114,20 @@ class ReplyToMentionUseCase:
             result.text, message, self._bot_user_id, self._persona.name
         )
         await self._message_repository.save(bot_message)
+
+        # 8. Create judgment cache to prevent duplicate responses from periodic checker
+        if self._judgment_cache_repository is not None:
+            current_time = datetime.now(timezone.utc)
+            skip_seconds = 3600  # 1 hour
+            cache = JudgmentCache(
+                channel_id=message.channel.id,
+                thread_ts=message.thread_ts,
+                should_respond=True,
+                confidence=1.0,
+                reason="Responded to mention",
+                latest_message_ts=bot_message.id,
+                next_check_at=current_time + timedelta(seconds=skip_seconds),
+                created_at=current_time,
+                updated_at=current_time,
+            )
+            await self._judgment_cache_repository.save(cache)

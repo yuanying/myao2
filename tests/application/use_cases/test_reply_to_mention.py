@@ -7,7 +7,14 @@ import pytest
 
 from myao2.application.use_cases import ReplyToMentionUseCase
 from myao2.config import PersonaConfig
-from myao2.domain.entities import Channel, Context, GenerationResult, Message, User
+from myao2.domain.entities import (
+    Channel,
+    Context,
+    GenerationResult,
+    JudgmentCache,
+    Message,
+    User,
+)
 from myao2.domain.entities.channel_messages import ChannelMessages
 
 
@@ -60,6 +67,14 @@ def mock_memory_repository() -> Mock:
     """Create mock memory repository."""
     repo = Mock()
     repo.find_by_scope_and_type = AsyncMock(return_value=None)
+    return repo
+
+
+@pytest.fixture
+def mock_judgment_cache_repository() -> Mock:
+    """Create mock judgment cache repository."""
+    repo = Mock()
+    repo.save = AsyncMock()
     return repo
 
 
@@ -391,3 +406,123 @@ class TestReplyToMentionUseCaseContextGeneration:
 
         assert "context" in call_args.kwargs
         assert isinstance(call_args.kwargs["context"], Context)
+
+
+class TestReplyToMentionUseCaseJudgmentCache:
+    """Tests for judgment cache creation."""
+
+    async def test_creates_judgment_cache_after_reply(
+        self,
+        mock_messaging_service: Mock,
+        mock_response_generator: Mock,
+        mock_message_repository: Mock,
+        mock_channel_repository: Mock,
+        mock_memory_repository: Mock,
+        mock_judgment_cache_repository: Mock,
+        persona: PersonaConfig,
+        bot_user_id: str,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that judgment cache is created after successful reply."""
+        use_case = ReplyToMentionUseCase(
+            messaging_service=mock_messaging_service,
+            response_generator=mock_response_generator,
+            message_repository=mock_message_repository,
+            channel_repository=mock_channel_repository,
+            memory_repository=mock_memory_repository,
+            persona=persona,
+            bot_user_id=bot_user_id,
+            judgment_cache_repository=mock_judgment_cache_repository,
+        )
+
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text=f"Hello <@{bot_user_id}>!",
+            timestamp=timestamp,
+            mentions=[bot_user_id],
+        )
+
+        await use_case.execute(message)
+
+        # Verify judgment cache was saved
+        mock_judgment_cache_repository.save.assert_awaited_once()
+        saved_cache = mock_judgment_cache_repository.save.call_args[0][0]
+        assert isinstance(saved_cache, JudgmentCache)
+        assert saved_cache.channel_id == channel.id
+        assert saved_cache.thread_ts is None  # Top-level message
+        assert saved_cache.should_respond is True
+        assert saved_cache.confidence == 1.0
+        assert saved_cache.reason == "Responded to mention"
+
+    async def test_creates_judgment_cache_with_thread_ts(
+        self,
+        mock_messaging_service: Mock,
+        mock_response_generator: Mock,
+        mock_message_repository: Mock,
+        mock_channel_repository: Mock,
+        mock_memory_repository: Mock,
+        mock_judgment_cache_repository: Mock,
+        persona: PersonaConfig,
+        bot_user_id: str,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+    ) -> None:
+        """Test that judgment cache includes thread_ts for thread replies."""
+        use_case = ReplyToMentionUseCase(
+            messaging_service=mock_messaging_service,
+            response_generator=mock_response_generator,
+            message_repository=mock_message_repository,
+            channel_repository=mock_channel_repository,
+            memory_repository=mock_memory_repository,
+            persona=persona,
+            bot_user_id=bot_user_id,
+            judgment_cache_repository=mock_judgment_cache_repository,
+        )
+
+        thread_ts = "1234567890.123456"
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text=f"<@{bot_user_id}> help me",
+            timestamp=timestamp,
+            thread_ts=thread_ts,
+            mentions=[bot_user_id],
+        )
+
+        await use_case.execute(message)
+
+        # Verify judgment cache includes thread_ts
+        mock_judgment_cache_repository.save.assert_awaited_once()
+        saved_cache = mock_judgment_cache_repository.save.call_args[0][0]
+        assert saved_cache.thread_ts == thread_ts
+
+    async def test_does_not_create_cache_without_repository(
+        self,
+        use_case: ReplyToMentionUseCase,
+        mock_messaging_service: Mock,
+        channel: Channel,
+        user: User,
+        timestamp: datetime,
+        bot_user_id: str,
+    ) -> None:
+        """Test that cache creation is skipped when repository is not provided."""
+        message = Message(
+            id="M001",
+            channel=channel,
+            user=user,
+            text=f"Hello <@{bot_user_id}>!",
+            timestamp=timestamp,
+            mentions=[bot_user_id],
+        )
+
+        # Should not raise any errors
+        await use_case.execute(message)
+
+        # Messaging should still work
+        mock_messaging_service.send_message.assert_awaited_once()
