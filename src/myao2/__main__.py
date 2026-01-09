@@ -113,6 +113,7 @@ async def main() -> None:
     channel_repository = SQLiteChannelRepository(db_manager.get_session)
     memory_repository = SQLiteMemoryRepository(db_manager.get_session)
     memo_repository = SQLiteMemoRepository(db_manager.get_session)
+    judgment_cache_repository = SQLiteJudgmentCacheRepository(db_manager.get_session)
 
     event_adapter = SlackEventAdapter(
         client=app.client,
@@ -174,6 +175,7 @@ async def main() -> None:
         persona=config.persona,
         bot_user_id=bot_user_id,
         memo_repository=memo_repository,
+        judgment_cache_repository=judgment_cache_repository,
     )
 
     register_handlers(
@@ -200,8 +202,6 @@ async def main() -> None:
         channel_repository=channel_repository,
         bot_user_id=bot_user_id,
     )
-
-    judgment_cache_repository = SQLiteJudgmentCacheRepository(db_manager.get_session)
 
     autonomous_response_use_case = AutonomousResponseUseCase(
         channel_monitor=channel_monitor,
