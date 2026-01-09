@@ -3,6 +3,7 @@
 from myao2.domain.entities.channel import Channel
 from myao2.domain.entities.channel_messages import ChannelMemory, ChannelMessages
 from myao2.domain.entities.context import Context
+from myao2.domain.entities.event import Event, EventType
 from myao2.domain.entities.judgment_cache import JudgmentCache
 from myao2.domain.entities.judgment_result import JudgmentResult
 from myao2.domain.entities.llm_metrics import LLMMetrics
@@ -24,6 +25,8 @@ __all__ = [
     "ChannelMemory",
     "ChannelMessages",
     "Context",
+    "Event",
+    "EventType",
     "GenerationResult",
     "JudgmentCache",
     "JudgmentResult",

@@ -23,6 +23,7 @@ Phase 4 で以下が実装済みであること：
 | 02 | 動的待機時間 | [02-dynamic-wait.md](./02-dynamic-wait.md) | 活発なチャンネルでは応答待機時間を短縮 |
 | 03 | Web Fetch ツール | [03-web-fetch-tool.md](./03-web-fetch-tool.md) | 外部WebページをMarkdown形式で取得するツール |
 | 04 | Web Search ツール | [04-web-search-tool.md](./04-web-search-tool.md) | Tavily APIを使用したウェブ検索ツール |
+| 05 | イベント駆動アーキテクチャ | [05-event-driven-architecture.md](./05-event-driven-architecture.md) | イベント駆動型への書き換え、重複制御、再発火機能 |
 
 ---
 
