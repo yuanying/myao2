@@ -96,3 +96,9 @@ tools:
     api_endpoint: ${WEB_FETCH_API_ENDPOINT}
     timeout_seconds: 60        # タイムアウト秒数（デフォルト: 60）
     max_content_length: 20000  # 取得コンテンツの最大文字数（デフォルト: 20000）
+  web_search:
+    enabled: true
+    api_key: ${TAVILY_API_KEY}
+    search_depth: basic        # 検索深度: basic, advanced, fast, ultra-fast（デフォルト: basic）
+    max_results: 5             # 検索結果の最大件数（デフォルト: 5）
+    max_content_length: 500    # 各結果のcontent最大文字数、0で無制限（デフォルト: 500）

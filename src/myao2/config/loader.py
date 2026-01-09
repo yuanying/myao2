@@ -20,6 +20,7 @@ from myao2.config.models import (
     SlackConfig,
     ToolsConfig,
     WebFetchConfig,
+    WebSearchConfig,
 )
 
 
@@ -252,7 +253,21 @@ def load_config(path: str | Path) -> Config:
                 max_content_length=web_fetch_data.get("max_content_length", 20000),
             )
 
-        tools_config = ToolsConfig(web_fetch=web_fetch_config)
+        web_search_config: WebSearchConfig | None = None
+        web_search_data = tools_data.get("web_search")
+        if web_search_data:
+            web_search_config = WebSearchConfig(
+                enabled=web_search_data.get("enabled", True),
+                api_key=web_search_data.get("api_key", ""),
+                search_depth=web_search_data.get("search_depth", "basic"),
+                max_results=web_search_data.get("max_results", 5),
+                max_content_length=web_search_data.get("max_content_length", 500),
+            )
+
+        tools_config = ToolsConfig(
+            web_fetch=web_fetch_config,
+            web_search=web_search_config,
+        )
 
     return Config(
         slack=slack,

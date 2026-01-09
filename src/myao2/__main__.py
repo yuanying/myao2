@@ -19,6 +19,7 @@ from myao2.infrastructure.llm.strands import (
 )
 from myao2.infrastructure.llm.strands.memo_tools import MemoToolsFactory
 from myao2.infrastructure.llm.strands.web_fetch_tools import WebFetchToolsFactory
+from myao2.infrastructure.llm.strands.web_search_tools import WebSearchToolsFactory
 from myao2.infrastructure.persistence import (
     DatabaseManager,
     DBChannelMonitor,
@@ -144,10 +145,23 @@ async def main() -> None:
         web_fetch_tools_factory = WebFetchToolsFactory(config.tools.web_fetch)
         logger.info("Web fetch tool enabled")
 
+    # Create web_search_tools_factory if enabled
+    web_search_tools_factory: WebSearchToolsFactory | None = None
+    if config.tools and config.tools.web_search and config.tools.web_search.enabled:
+        if config.tools.web_search.api_key:
+            web_search_tools_factory = WebSearchToolsFactory(config.tools.web_search)
+            logger.info("Web search tool enabled")
+        else:
+            logger.warning(
+                "Web search tool is enabled but API key is not set. "
+                "Tool not registered."
+            )
+
     response_generator = StrandsResponseGenerator(
         response_model,
         memo_tools_factory=memo_tools_factory,
         web_fetch_tools_factory=web_fetch_tools_factory,
+        web_search_tools_factory=web_search_tools_factory,
     )
 
     # Initialize use case for mention replies

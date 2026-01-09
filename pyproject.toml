@@ -11,6 +11,7 @@ dependencies = [
     "sqlmodel>=0.0.30",
     "aiosqlite>=0.20.0",
     "strands-agents[litellm]>=1.21.0",
+    "tavily-python>=0.7.17",
 ]
 
 [project.scripts]
