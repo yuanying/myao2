@@ -5,13 +5,14 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from myao2.infrastructure.events.queue import EventQueue
 from myao2.presentation.slack_handlers import register_handlers
 
 
 @pytest.fixture
-def mock_reply_use_case() -> AsyncMock:
-    """Create a mock ReplyToMentionUseCase."""
-    return AsyncMock()
+def mock_event_queue() -> AsyncMock:
+    """Create a mock EventQueue."""
+    return AsyncMock(spec=EventQueue)
 
 
 @pytest.fixture
@@ -42,7 +43,7 @@ def bot_user_id() -> str:
 
 @pytest.fixture
 def registered_handlers(
-    mock_reply_use_case: AsyncMock,
+    mock_event_queue: AsyncMock,
     mock_event_adapter: AsyncMock,
     mock_message_repository: AsyncMock,
     mock_channel_repository: AsyncMock,
@@ -63,7 +64,7 @@ def registered_handlers(
 
     register_handlers(
         mock_app,
-        mock_reply_use_case,
+        mock_event_queue,
         mock_event_adapter,
         bot_user_id,
         mock_message_repository,
@@ -117,7 +118,7 @@ class TestMemberLeftChannelHandler:
 
     async def test_handler_logs_error_on_delete_failure(
         self,
-        mock_reply_use_case: AsyncMock,
+        mock_event_queue: AsyncMock,
         mock_event_adapter: AsyncMock,
         mock_message_repository: AsyncMock,
         mock_channel_repository: AsyncMock,
@@ -142,7 +143,7 @@ class TestMemberLeftChannelHandler:
 
         register_handlers(
             mock_app,
-            mock_reply_use_case,
+            mock_event_queue,
             mock_event_adapter,
             bot_user_id,
             mock_message_repository,
@@ -167,7 +168,7 @@ class TestMessageHandlerChannelFiltering:
 
     async def test_message_from_unknown_channel_is_skipped(
         self,
-        mock_reply_use_case: AsyncMock,
+        mock_event_queue: AsyncMock,
         mock_event_adapter: AsyncMock,
         mock_message_repository: AsyncMock,
         mock_channel_repository: AsyncMock,
@@ -193,7 +194,7 @@ class TestMessageHandlerChannelFiltering:
 
         register_handlers(
             mock_app,
-            mock_reply_use_case,
+            mock_event_queue,
             mock_event_adapter,
             bot_user_id,
             mock_message_repository,
@@ -221,7 +222,7 @@ class TestMessageHandlerChannelFiltering:
 
     async def test_message_from_known_channel_is_processed(
         self,
-        mock_reply_use_case: AsyncMock,
+        mock_event_queue: AsyncMock,
         mock_event_adapter: AsyncMock,
         mock_message_repository: AsyncMock,
         mock_channel_repository: AsyncMock,
@@ -264,7 +265,7 @@ class TestMessageHandlerChannelFiltering:
 
         register_handlers(
             mock_app,
-            mock_reply_use_case,
+            mock_event_queue,
             mock_event_adapter,
             bot_user_id,
             mock_message_repository,
