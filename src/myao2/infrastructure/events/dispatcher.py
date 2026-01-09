@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
 from myao2.domain.entities.event import Event, EventType
 
@@ -10,8 +11,11 @@ logger = logging.getLogger(__name__)
 # Handler type: async function that takes an Event and returns None
 EventHandler = Callable[[Event], Awaitable[None]]
 
+# Type variable for preserving function type in decorator
+F = TypeVar("F", bound=Callable[..., Awaitable[None]])
 
-def event_handler(event_type: EventType) -> Callable[[EventHandler], EventHandler]:
+
+def event_handler(event_type: EventType) -> Callable[[F], F]:
     """Decorator for registering event handlers.
 
     Usage:
@@ -26,7 +30,7 @@ def event_handler(event_type: EventType) -> Callable[[EventHandler], EventHandle
         Decorator function.
     """
 
-    def decorator(func: EventHandler) -> EventHandler:
+    def decorator(func: F) -> F:
         # Store the event type as an attribute on the function
         func._event_type = event_type  # type: ignore[attr-defined]
         return func
