@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myao2
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # SQLite requires single instance
+  selector:
+    matchLabels:
+      app: myao2
+  template:
+    metadata:
+      labels:
+        app: myao2
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: myao2
+          image: ghcr.io/yuanying/myao2:latest
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            # Required environment variables
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: myao2-secrets
+                  key: slack-bot-token
+            - name: SLACK_APP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: myao2-secrets
+                  key: slack-app-token
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: myao2-secrets
+                  key: openai-api-key
+            # Optional environment variables
+            - name: TAVILY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: myao2-secrets
+                  key: tavily-api-key
+                  optional: true
+            - name: WEB_FETCH_API_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: myao2-secrets
+                  key: web-fetch-api-endpoint
+                  optional: true
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: myao2-secrets
+                  key: anthropic-api-key
+                  optional: true
+            - name: AZURE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: myao2-secrets
+                  key: azure-api-key
+                  optional: true
+            - name: AZURE_API_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: myao2-secrets
+                  key: azure-api-base
+                  optional: true
+            - name: AZURE_API_VERSION
+              valueFrom:
+                secretKeyRef:
+                  name: myao2-secrets
+                  key: azure-api-version
+                  optional: true
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep -f 'python -m myao2'"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: myao2-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: myao2-data
+        - name: tmp
+          emptyDir: {}
+      restartPolicy: Always
