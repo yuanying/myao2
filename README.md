@@ -58,6 +58,111 @@ src/myao2/
 └── presentation/    # プレゼンテーション層（Slackイベントハンドラ）
 ```
 
+## Docker
+
+### イメージのビルド
+
+ローカルでビルドする場合:
+
+```bash
+docker build -t myao2:latest .
+```
+
+### ローカルでの実行
+
+```bash
+docker run --rm \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  -v $(pwd)/data:/app/data \
+  -e SLACK_BOT_TOKEN=xoxb-xxx \
+  -e SLACK_APP_TOKEN=xapp-xxx \
+  -e OPENAI_API_KEY=sk-xxx \
+  myao2:latest
+```
+
+## Kubernetes デプロイ
+
+### 前提条件
+
+- Kubernetes クラスタへのアクセス
+- kubectl のインストールと設定
+
+### Secret の作成
+
+必須の環境変数を含む Secret を作成します:
+
+```bash
+kubectl create namespace myao2
+kubectl -n myao2 create secret generic myao2-secrets \
+  --from-literal=slack-bot-token=xoxb-xxx \
+  --from-literal=slack-app-token=xapp-xxx \
+  --from-literal=openai-api-key=sk-xxx
+```
+
+オプショナルな環境変数を追加する場合:
+
+```bash
+kubectl -n myao2 patch secret myao2-secrets --patch '{"stringData": {
+  "tavily-api-key": "tvly-xxx",
+  "anthropic-api-key": "sk-ant-xxx",
+  "azure-api-key": "xxx",
+  "azure-api-base": "https://your-resource.openai.azure.com/",
+  "azure-api-version": "2023-05-15"
+}}'
+```
+
+**環境変数一覧:**
+
+| Secret Key | 環境変数 | 必須 | 説明 |
+|------------|----------|------|------|
+| `slack-bot-token` | `SLACK_BOT_TOKEN` | Yes | Slack Bot Token |
+| `slack-app-token` | `SLACK_APP_TOKEN` | Yes | Slack App Token |
+| `openai-api-key` | `OPENAI_API_KEY` | Yes | OpenAI API Key |
+| `tavily-api-key` | `TAVILY_API_KEY` | No | Tavily Web検索 API Key |
+| `web-fetch-api-endpoint` | `WEB_FETCH_API_ENDPOINT` | No | Web取得 API エンドポイント |
+| `anthropic-api-key` | `ANTHROPIC_API_KEY` | No | Anthropic API Key |
+| `azure-api-key` | `AZURE_API_KEY` | No | Azure OpenAI API Key |
+| `azure-api-base` | `AZURE_API_BASE` | No | Azure OpenAI エンドポイント |
+| `azure-api-version` | `AZURE_API_VERSION` | No | Azure OpenAI APIバージョン |
+
+### デプロイ
+
+このリポジトリのマニフェストを直接参照してデプロイできます:
+
+```bash
+kubectl kustomize https://github.com/yuanying/myao2/manifests/overlays/production | kubectl apply -f -
+```
+
+### ConfigMap のカスタマイズ
+
+独自の config.yaml を使用する場合は、kustomization.yaml を作成して上書きします:
+
+```yaml
+# my-deployment/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - https://github.com/yuanying/myao2/manifests/overlays/production
+
+configMapGenerator:
+  - name: myao2-config
+    behavior: replace
+    files:
+      - config.yaml
+```
+
+```bash
+# デプロイ
+kubectl kustomize my-deployment | kubectl apply -f -
+```
+
+### ログ確認
+
+```bash
+kubectl -n myao2 logs -f deployment/myao2
+```
+
 ## ライセンス
 
 MIT
