@@ -6,11 +6,19 @@ import signal
 import sys
 from pathlib import Path
 
-from myao2.application.services import PeriodicChecker
-from myao2.application.services.background_memory import BackgroundMemoryGenerator
-from myao2.application.use_cases import AutonomousResponseUseCase, ReplyToMentionUseCase
+from myao2.application.handlers import (
+    AutonomousCheckEventHandler,
+    ChannelSyncEventHandler,
+    MessageEventHandler,
+    SummaryEventHandler,
+)
+from myao2.application.use_cases import AutonomousResponseUseCase
 from myao2.application.use_cases.generate_memory import GenerateMemoryUseCase
 from myao2.config import ConfigError, LoggingConfig, load_config
+from myao2.infrastructure.events.dispatcher import EventDispatcher
+from myao2.infrastructure.events.loop import EventLoop
+from myao2.infrastructure.events.queue import EventQueue
+from myao2.infrastructure.events.scheduler import EventScheduler
 from myao2.infrastructure.llm.strands import (
     StrandsMemorySummarizer,
     StrandsResponseGenerator,
@@ -165,8 +173,12 @@ async def main() -> None:
         web_search_tools_factory=web_search_tools_factory,
     )
 
-    # Initialize use case for mention replies
-    reply_use_case = ReplyToMentionUseCase(
+    # Initialize event system
+    event_queue = EventQueue()
+    event_dispatcher = EventDispatcher()
+
+    # Initialize message event handler
+    message_event_handler = MessageEventHandler(
         messaging_service=messaging_service,
         response_generator=response_generator,
         message_repository=message_repository,
@@ -177,10 +189,11 @@ async def main() -> None:
         memo_repository=memo_repository,
         judgment_cache_repository=judgment_cache_repository,
     )
+    event_dispatcher.register_handler(message_event_handler.handle)
 
     register_handlers(
         app,
-        reply_use_case,
+        event_queue,
         event_adapter,
         bot_user_id,
         message_repository,
@@ -203,6 +216,7 @@ async def main() -> None:
         bot_user_id=bot_user_id,
     )
 
+    # Initialize autonomous response use case (without channel_sync_service)
     autonomous_response_use_case = AutonomousResponseUseCase(
         channel_monitor=channel_monitor,
         response_judgment=response_judgment,
@@ -214,14 +228,15 @@ async def main() -> None:
         memory_repository=memory_repository,
         config=config,
         bot_user_id=bot_user_id,
-        channel_sync_service=channel_initializer,
+        channel_sync_service=None,  # Channel sync is now handled by event
         memo_repository=memo_repository,
     )
 
-    periodic_checker = PeriodicChecker(
+    # Initialize autonomous check event handler
+    autonomous_check_handler = AutonomousCheckEventHandler(
         autonomous_response_use_case=autonomous_response_use_case,
-        config=config.response,
     )
+    event_dispatcher.register_handler(autonomous_check_handler.handle)
 
     # Initialize memory generation components
     memory_summarizer = StrandsMemorySummarizer(
@@ -238,28 +253,47 @@ async def main() -> None:
         persona=config.persona,
     )
 
-    background_memory_generator = BackgroundMemoryGenerator(
+    # Initialize summary event handler
+    summary_event_handler = SummaryEventHandler(
         generate_memory_use_case=generate_memory_use_case,
-        config=config.memory,
+    )
+    event_dispatcher.register_handler(summary_event_handler.handle)
+
+    # Initialize channel sync event handler
+    channel_sync_handler = ChannelSyncEventHandler(
+        channel_sync_service=channel_initializer,
+    )
+    event_dispatcher.register_handler(channel_sync_handler.handle)
+
+    # Initialize event loop and scheduler
+    event_loop = EventLoop(
+        queue=event_queue,
+        dispatcher=event_dispatcher,
+    )
+
+    event_scheduler = EventScheduler(
+        queue=event_queue,
+        check_interval_seconds=config.response.check_interval_seconds,
+        summary_interval_seconds=config.memory.long_term_update_interval_seconds,
+        channel_sync_interval_seconds=config.response.check_interval_seconds,
     )
 
     runner = SlackAppRunner(app, config.slack.app_token)
 
     logger.info("Starting %s...", config.persona.name)
     logger.info("Starting Socket Mode handler...")
+    logger.info("Starting event loop...")
     logger.info(
-        "Starting periodic checker (interval: %ds)...",
+        "Starting event scheduler (check=%ds, summary=%ds, channel_sync=%ds)...",
         config.response.check_interval_seconds,
-    )
-    logger.info(
-        "Starting background memory generator (interval: %ds)...",
         config.memory.long_term_update_interval_seconds,
+        config.response.check_interval_seconds,
     )
 
     # Create tasks
     runner_task = asyncio.create_task(runner.start())
-    checker_task = asyncio.create_task(periodic_checker.start())
-    memory_task = asyncio.create_task(background_memory_generator.start())
+    event_loop_task = asyncio.create_task(event_loop.start())
+    event_scheduler_task = asyncio.create_task(event_scheduler.start())
 
     # Setup signal handlers for graceful shutdown
     stop_event = asyncio.Event()
@@ -278,9 +312,9 @@ async def main() -> None:
     # Graceful shutdown
     logger.info("Shutting down...")
 
-    # Stop periodic checker and background memory generator (have graceful stop)
-    await periodic_checker.stop()
-    await background_memory_generator.stop()
+    # Stop event loop and scheduler (have graceful stop)
+    await event_loop.stop()
+    await event_scheduler.stop()
 
     # Try to close runner with timeout
     closed = await runner.close(timeout=5.0)
@@ -289,11 +323,13 @@ async def main() -> None:
 
     # Cancel any remaining tasks
     runner_task.cancel()
-    checker_task.cancel()
-    memory_task.cancel()
+    event_loop_task.cancel()
+    event_scheduler_task.cancel()
 
     # Wait for tasks to complete
-    await asyncio.gather(runner_task, checker_task, memory_task, return_exceptions=True)
+    await asyncio.gather(
+        runner_task, event_loop_task, event_scheduler_task, return_exceptions=True
+    )
 
     # Close database connections
     await db_manager.close()

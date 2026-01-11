@@ -5,8 +5,9 @@ from typing import Any
 
 from slack_bolt.async_app import AsyncApp
 
-from myao2.application.use_cases import ReplyToMentionUseCase
+from myao2.domain.entities import Event, EventType
 from myao2.domain.repositories import ChannelRepository, MessageRepository
+from myao2.infrastructure.events.queue import EventQueue
 from myao2.infrastructure.slack import SlackEventAdapter
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ def _unwrap_message_changed(event: dict[str, Any]) -> dict[str, Any]:
 
 def register_handlers(
     app: AsyncApp,
-    reply_use_case: ReplyToMentionUseCase,
+    event_queue: EventQueue,
     event_adapter: SlackEventAdapter,
     bot_user_id: str,
     message_repository: MessageRepository,
@@ -40,7 +41,7 @@ def register_handlers(
 
     Args:
         app: AsyncApp instance.
-        reply_use_case: Use case for replying to mentions.
+        event_queue: Event queue for dispatching events.
         event_adapter: Adapter for converting events to entities.
         bot_user_id: The bot's user ID.
         message_repository: Repository for persisting messages.
@@ -134,10 +135,20 @@ def register_handlers(
 
         logger.info("Received message with mention: %s", event.get("ts"))
 
+        # Enqueue MESSAGE event
         try:
-            await reply_use_case.execute(message)
+            message_event = Event(
+                type=EventType.MESSAGE,
+                payload={
+                    "channel_id": channel_id,
+                    "thread_ts": message.thread_ts,
+                    "message": message,
+                },
+            )
+            await event_queue.enqueue(message_event)
+            logger.info("Enqueued MESSAGE event: %s", event.get("ts"))
         except Exception:
-            logger.exception("Error handling message event")
+            logger.exception("Error enqueueing message event")
 
     @app.event("member_left_channel")
     async def handle_member_left_channel(event: dict) -> None:
