@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myao2-config
+data:
+  config.yaml: |
+    # myao2 configuration template
+    # Override this ConfigMap using kustomize configMapGenerator
+    # See README.md for details
+
+    # Slack settings
+    slack:
+      bot_token: ${SLACK_BOT_TOKEN}
+      app_token: ${SLACK_APP_TOKEN}
+
+    # strands-agents settings
+    agents:
+      response:
+        model_id: "openai/gpt-4o"
+        params:
+          temperature: 0.7
+          max_tokens: 1000
+        client_args:
+          api_key: ${OPENAI_API_KEY}
+      judgment:
+        model_id: "openai/gpt-4o-mini"
+        params:
+          temperature: 0.3
+          max_tokens: 500
+        client_args:
+          api_key: ${OPENAI_API_KEY}
+      memory:
+        model_id: "openai/gpt-4o"
+        params:
+          temperature: 0.5
+          max_tokens: 800
+        client_args:
+          api_key: ${OPENAI_API_KEY}
+
+    # Persona settings
+    persona:
+      name: "myao"
+      system_prompt: "You are a friendly chatbot."
+
+    # Response settings
+    response:
+      check_interval_seconds: 60
+      min_wait_seconds: 300
+      jitter_ratio: 0.3
+      message_limit: 20
+      max_message_age_seconds: 43200
+      channel_messages_limit: 50
+      active_channel_days: 7
+      thread_memory_days: 7
+      response_interval:
+        min: 3.0
+        max: 10.0
+      judgment_skip:
+        enabled: true
+        thresholds:
+          - min_confidence: 0.9
+            skip_seconds: 43200
+          - min_confidence: 0.7
+            skip_seconds: 3600
+        default_skip_seconds: 600
+
+    # Memory settings
+    memory:
+      database_path: "./data/memory.db"
+      long_term_update_interval_seconds: 3600
+      short_term_window_hours: 24
+      long_term_summary_max_tokens: 500
+      short_term_summary_max_tokens: 300
+
+    # Logging settings
+    logging:
+      level: INFO
+      format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+      debug_llm_messages: false
+
+    # Tools settings (optional)
+    tools:
+      web_fetch:
+        enabled: false
+        api_endpoint: ${WEB_FETCH_API_ENDPOINT}
+        timeout_seconds: 60
+        max_content_length: 20000
+      web_search:
+        enabled: false
+        api_key: ${TAVILY_API_KEY}
+        search_depth: basic
+        max_results: 5
+        max_content_length: 500

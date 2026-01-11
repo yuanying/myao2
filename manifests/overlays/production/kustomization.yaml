@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: myao2
+
+resources:
+  - ../../base
+  - namespace.yaml
+
+patches:
+  - path: deployment-patch.yaml
+
+images:
+  - name: ghcr.io/yuanying/myao2
+    newTag: latest  # Replace with specific tag in CI/CD
+
+# Secret should be created manually or using External Secrets:
+# (Key names become environment variable names directly)
+# kubectl create namespace myao2
+# kubectl -n myao2 create secret generic myao2-secrets \
+#   --from-literal=SLACK_BOT_TOKEN=xoxb-xxx \
+#   --from-literal=SLACK_APP_TOKEN=xapp-xxx \
+#   --from-literal=OPENAI_API_KEY=sk-xxx
+#
+# Optional secrets can be added with patch:
+# kubectl -n myao2 patch secret myao2-secrets --patch '{"stringData": {
+#   "TAVILY_API_KEY": "tvly-xxx",
+#   "ANTHROPIC_API_KEY": "sk-ant-xxx"
+# }}'
