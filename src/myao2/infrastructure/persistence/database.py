@@ -11,6 +11,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Import models to register them with SQLModel metadata
 from myao2.infrastructure.persistence import models as _models  # noqa: F401
+from myao2.infrastructure.persistence.migrations.memo_name_migration import (
+    migrate_memo_add_name,
+)
 
 
 class DatabaseManager:
@@ -61,8 +64,14 @@ class DatabaseManager:
         """テーブルを作成する
 
         既存のテーブルがある場合は何もしない。
+        マイグレーションも実行する。
         """
         engine = self.get_engine()
+
+        # Run migrations first
+        await migrate_memo_add_name(engine)
+
+        # Then create any new tables
         async with engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
 

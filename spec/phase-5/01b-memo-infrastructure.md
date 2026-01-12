@@ -39,6 +39,7 @@ class MemoModel(SQLModel, table=True):
     __tablename__ = "memos"
 
     id: str = Field(primary_key=True)  # UUID を文字列として保存
+    name: str = Field(unique=True, index=True)  # ユニーク、1〜32文字
     content: str
     priority: int = Field(index=True)
     tags: list[str] = Field(default_factory=list, sa_type=JSON)  # SQLite JSON型
@@ -49,6 +50,7 @@ class MemoModel(SQLModel, table=True):
 
 ### インデックス
 
+- `name`: 名前検索用（ユニーク制約）
 - `priority`: 優先度検索用
 - `updated_at`: 更新日時ソート用
 
@@ -78,6 +80,7 @@ async def save(self, memo: Memo) -> None:
     async with self._session_factory() as session:
         model = MemoModel(
             id=str(memo.id),
+            name=memo.name,
             content=memo.content,
             priority=memo.priority,
             tags=memo.tags,
@@ -93,12 +96,37 @@ async def save(self, memo: Memo) -> None:
 
 ```python
 async def find_by_id(self, memo_id: UUID) -> Memo | None:
-    """ID でメモを検索"""
+    """ID でメモを検索（内部利用）"""
     async with self._session_factory() as session:
         result = await session.get(MemoModel, str(memo_id))
         if result is None:
             return None
         return self._to_entity(result)
+```
+
+### find_by_name
+
+```python
+async def find_by_name(self, name: str) -> Memo | None:
+    """名前でメモを検索"""
+    async with self._session_factory() as session:
+        stmt = select(MemoModel).where(MemoModel.name == name)
+        result = await session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        return self._to_entity(model)
+```
+
+### exists_by_name
+
+```python
+async def exists_by_name(self, name: str) -> bool:
+    """名前でメモの存在を確認"""
+    async with self._session_factory() as session:
+        stmt = select(func.count()).select_from(MemoModel).where(MemoModel.name == name)
+        result = await session.execute(stmt)
+        return (result.scalar() or 0) > 0
 ```
 
 ### find_all
@@ -211,13 +239,13 @@ async def get_all_tags_with_stats(self) -> list[TagStats]:
         ]
 ```
 
-### delete
+### delete_by_name
 
 ```python
-async def delete(self, memo_id: UUID) -> bool:
-    """メモを削除"""
+async def delete_by_name(self, name: str) -> bool:
+    """名前でメモを削除"""
     async with self._session_factory() as session:
-        stmt = delete(MemoModel).where(MemoModel.id == str(memo_id))
+        stmt = delete(MemoModel).where(MemoModel.name == name)
         result = await session.execute(stmt)
         await session.commit()
         return result.rowcount > 0
@@ -268,6 +296,7 @@ def _to_entity(self, model: MemoModel) -> Memo:
     """MemoModel を Memo エンティティに変換"""
     return Memo(
         id=UUID(model.id),
+        name=model.name,
         content=model.content,
         priority=model.priority,
         tags=model.tags,
@@ -280,6 +309,7 @@ def _row_to_entity(self, row: Mapping[str, Any]) -> Memo:
     """SQL結果行を Memo エンティティに変換"""
     return Memo(
         id=UUID(row["id"]),
+        name=row["name"],
         content=row["content"],
         priority=row["priority"],
         tags=self._parse_json_field(row["tags"]),
@@ -299,6 +329,10 @@ def _row_to_entity(self, row: Mapping[str, Any]) -> Memo:
 - save: 既存更新（upsert）
 - find_by_id: 存在する場合
 - find_by_id: 存在しない場合
+- find_by_name: 存在する場合
+- find_by_name: 存在しない場合
+- exists_by_name: 存在する場合
+- exists_by_name: 存在しない場合
 - find_all: 空の場合
 - find_all: 複数件の場合（ソート確認）
 - find_all: offset/limit の動作
@@ -310,7 +344,7 @@ def _row_to_entity(self, row: Mapping[str, Any]) -> Memo:
 - find_by_tag: offset/limit の動作
 - get_all_tags_with_stats: タグ統計取得
 - get_all_tags_with_stats: タグなしの場合
-- delete: 存在するメモの削除
-- delete: 存在しないメモの削除
+- delete_by_name: 存在するメモの削除
+- delete_by_name: 存在しないメモの削除
 - count: 全件カウント
 - count: タグ指定カウント

@@ -44,6 +44,7 @@ class SQLiteMemoRepository:
         async with self._session_factory() as session:
             model = MemoModel(
                 id=str(memo.id),
+                name=memo.name,
                 content=memo.content,
                 priority=memo.priority,
                 tags=memo.tags,
@@ -68,6 +69,42 @@ class SQLiteMemoRepository:
             if result is None:
                 return None
             return self._to_entity(result)
+
+    async def find_by_name(self, name: str) -> Memo | None:
+        """name でメモを検索
+
+        Args:
+            name: メモの name
+
+        Returns:
+            見つかったメモ、または None
+        """
+        async with self._session_factory() as session:
+            stmt = select(MemoModel).where(MemoModel.name == name)
+            result = await session.exec(stmt)
+            model = result.first()
+            if model is None:
+                return None
+            return self._to_entity(model)
+
+    async def exists_by_name(self, name: str) -> bool:
+        """指定された name のメモが存在するか確認
+
+        Args:
+            name: 確認する name
+
+        Returns:
+            存在する場合 True、存在しない場合 False
+        """
+        async with self._session_factory() as session:
+            stmt = (
+                select(func.count())
+                .select_from(MemoModel)
+                .where(MemoModel.name == name)
+            )
+            result = await session.execute(stmt)
+            count = result.scalar() or 0
+            return count > 0
 
     async def find_all(
         self,
@@ -214,18 +251,18 @@ class SQLiteMemoRepository:
                 for row in rows
             ]
 
-    async def delete(self, memo_id: UUID) -> bool:
+    async def delete_by_name(self, name: str) -> bool:
         """メモを削除
 
         Args:
-            memo_id: 削除するメモの ID
+            name: 削除するメモの name
 
         Returns:
             削除成功の場合 True、メモが存在しない場合 False
         """
         async with self._session_factory() as session:
             stmt = delete(MemoModel).where(
-                MemoModel.id == str(memo_id)  # type: ignore[arg-type]
+                MemoModel.name == name  # type: ignore[arg-type]
             )
             result = await session.execute(stmt)
             await session.commit()
@@ -293,6 +330,7 @@ class SQLiteMemoRepository:
         """
         return Memo(
             id=UUID(model.id),
+            name=model.name,
             content=model.content,
             priority=model.priority,
             tags=model.tags,
@@ -312,6 +350,7 @@ class SQLiteMemoRepository:
         """
         return Memo(
             id=UUID(row["id"]),
+            name=row["name"],
             content=row["content"],
             priority=row["priority"],
             tags=self._parse_json_field(row["tags"]),

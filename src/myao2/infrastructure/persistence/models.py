@@ -98,6 +98,7 @@ class MemoModel(SQLModel, table=True):
     __tablename__ = "memos"
 
     id: str = Field(primary_key=True)  # UUID を文字列として保存
+    name: str = Field(unique=True, index=True)  # ユニークな名前
     content: str
     priority: int = Field(index=True)
     tags: list[str] = Field(default_factory=list, sa_type=JSON)  # SQLite JSON型

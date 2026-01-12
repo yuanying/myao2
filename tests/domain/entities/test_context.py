@@ -448,11 +448,14 @@ def create_test_memo(
     priority: int = 3,
     tags: list[str] | None = None,
     detail: str | None = None,
+    name: str | None = None,
 ) -> Memo:
     """Create a test Memo instance."""
     now = datetime.now(timezone.utc)
+    memo_id = uuid4()
     return Memo(
-        id=uuid4(),
+        id=memo_id,
+        name=name or str(memo_id)[:8],
         content=content,
         priority=priority,
         tags=tags or [],

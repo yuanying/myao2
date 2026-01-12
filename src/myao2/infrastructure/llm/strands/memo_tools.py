@@ -4,7 +4,6 @@ LLM が自発的に重要だと思ったことを記憶に残すためのメモ�
 """
 
 from datetime import datetime, timezone
-from uuid import UUID
 
 from strands import tool
 from strands.types.tools import ToolContext
@@ -35,6 +34,7 @@ def get_memo_repository(tool_context: ToolContext) -> MemoRepository:
 
 @tool(context=True)
 async def add_memo(
+    name: str,
     content: str,
     priority: int,
     tags: list[str] | None,
@@ -47,6 +47,7 @@ async def add_memo(
     複数人のチャットなので「誰が」が重要。人に関連するメモには必ず主語を入れる。
 
     Args:
+        name: メモの名前（ユニーク、1〜32文字）
         content: メモの内容（50文字程度を推奨、強制ではない。主語を明記すること）
         priority: 優先度（1-5、5が最高）
             - 5: 常に覚えておくべき重要情報（名前、家族、重要な予定）
@@ -61,22 +62,28 @@ async def add_memo(
         追加結果メッセージ
     """
     repo = get_memo_repository(tool_context)
+
+    # 重複チェック
+    if await repo.exists_by_name(name):
+        return f"メモの名前「{name}」は既に使用されています"
+
     try:
-        memo = create_memo(content=content, priority=priority, tags=tags)
+        memo = create_memo(name=name, content=content, priority=priority, tags=tags)
     except ValueError as e:
         return f"メモの作成に失敗しました: {e}"
 
     await repo.save(memo)
-    return f"メモを追加しました（ID: {str(memo.id)[:8]}）"
+    return f"メモを追加しました（name: {memo.name}）"
 
 
 @tool(context=True)
 async def edit_memo(
-    memo_id: str,
+    memo_name: str,
     content: str | None,
     priority: int | None,
     tags: list[str] | None,
     detail: str | None,
+    new_name: str | None,
     tool_context: ToolContext,
 ) -> str:
     """既存のメモを編集する。
@@ -85,27 +92,30 @@ async def edit_memo(
     detailを指定すると詳細情報として上書き更新される。
 
     Args:
-        memo_id: 編集するメモのID
+        memo_name: 編集するメモの名前
         content: 新しい内容（変更する場合のみ）
         priority: 新しい優先度（変更する場合のみ）
         tags: 新しいタグリスト（変更する場合のみ）
         detail: 詳細情報（上書き更新される）
+        new_name: 新しい名前（変更する場合のみ）
         tool_context: ツールコンテキスト
 
     Returns:
         編集結果メッセージ
     """
     repo = get_memo_repository(tool_context)
-    try:
-        memo_uuid = UUID(memo_id)
-    except ValueError:
-        return f"無効なメモID: {memo_id}"
 
-    existing = await repo.find_by_id(memo_uuid)
+    existing = await repo.find_by_name(memo_name)
     if existing is None:
-        return f"メモが見つかりません（ID: {memo_id}）"
+        return f"メモが見つかりません（name: {memo_name}）"
+
+    # new_name が指定された場合、重複チェック
+    if new_name is not None and new_name != existing.name:
+        if await repo.exists_by_name(new_name):
+            return f"メモの名前「{new_name}」は既に使用されています"
 
     # 変更がない場合はそのまま保持
+    final_name = new_name if new_name is not None else existing.name
     new_content = content if content is not None else existing.content
     new_priority = priority if priority is not None else existing.priority
     new_tags = tags if tags is not None else existing.tags
@@ -114,6 +124,7 @@ async def edit_memo(
     try:
         updated = Memo(
             id=existing.id,
+            name=final_name,
             content=new_content,
             priority=new_priority,
             tags=new_tags,
@@ -125,12 +136,12 @@ async def edit_memo(
         return f"メモの更新に失敗しました: {e}"
 
     await repo.save(updated)
-    return f"メモを更新しました（ID: {memo_id[:8]}）"
+    return f"メモを更新しました（name: {updated.name}）"
 
 
 @tool(context=True)
 async def remove_memo(
-    memo_id: str,
+    memo_name: str,
     tool_context: ToolContext,
 ) -> str:
     """メモを削除する。
@@ -138,23 +149,19 @@ async def remove_memo(
     不要になったメモを削除する場合に使用する。
 
     Args:
-        memo_id: 削除するメモのID
+        memo_name: 削除するメモの名前
         tool_context: ツールコンテキスト
 
     Returns:
         削除結果メッセージ
     """
     repo = get_memo_repository(tool_context)
-    try:
-        memo_uuid = UUID(memo_id)
-    except ValueError:
-        return f"無効なメモID: {memo_id}"
 
-    deleted = await repo.delete(memo_uuid)
+    deleted = await repo.delete_by_name(memo_name)
     if deleted:
-        return f"メモを削除しました（ID: {memo_id[:8]}）"
+        return f"メモを削除しました（name: {memo_name}）"
     else:
-        return f"メモが見つかりません（ID: {memo_id}）"
+        return f"メモが見つかりません（name: {memo_name}）"
 
 
 @tool(context=True)
@@ -173,7 +180,7 @@ async def list_memo(
         tool_context: ツールコンテキスト
 
     Returns:
-        メモ一覧（ID、優先度、タグ、内容、詳細有無を含む）
+        メモ一覧（name、優先度、タグ、内容、詳細有無を含む）
     """
     repo = get_memo_repository(tool_context)
     offset_val = offset or 0
@@ -199,7 +206,7 @@ async def list_memo(
         tags_str = ", ".join(memo.tags) if memo.tags else "なし"
         detail_marker = " [詳細あり]" if memo.has_detail else ""
         lines.append(
-            f"- [{str(memo.id)[:8]}] 優先度{memo.priority} [{tags_str}] "
+            f"- [{memo.name}] 優先度{memo.priority} [{tags_str}] "
             f"{memo.content}{detail_marker}"
         )
 
@@ -208,7 +215,7 @@ async def list_memo(
 
 @tool(context=True)
 async def get_memo(
-    memo_id: str,
+    memo_name: str,
     tool_context: ToolContext,
 ) -> str:
     """メモの詳細を取得する。
@@ -216,26 +223,22 @@ async def get_memo(
     詳細情報も含めて全て表示する。
 
     Args:
-        memo_id: 取得するメモのID
+        memo_name: 取得するメモの名前
         tool_context: ツールコンテキスト
 
     Returns:
-        メモの全情報（ID, 優先度, タグ, 内容, 詳細情報, 作成日, 更新日）
+        メモの全情報（name, 優先度, タグ, 内容, 詳細情報, 作成日, 更新日）
     """
     repo = get_memo_repository(tool_context)
-    try:
-        memo_uuid = UUID(memo_id)
-    except ValueError:
-        return f"無効なメモID: {memo_id}"
 
-    memo = await repo.find_by_id(memo_uuid)
+    memo = await repo.find_by_name(memo_name)
     if memo is None:
-        return f"メモが見つかりません（ID: {memo_id}）"
+        return f"メモが見つかりません（name: {memo_name}）"
 
     tags_str = ", ".join(memo.tags) if memo.tags else "なし"
     lines = [
         "メモ詳細:",
-        f"- ID: {str(memo.id)[:8]}",
+        f"- name: {memo.name}",
         f"- 優先度: {memo.priority}",
         f"- タグ: {tags_str}",
         f"- 内容: {memo.content}",

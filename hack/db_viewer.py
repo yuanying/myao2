@@ -311,6 +311,7 @@ class DatabaseViewer:
         return [
             {
                 "id": m.id,
+                "name": m.name,
                 "content": m.content,
                 "detail": m.detail,
                 "priority": m.priority,
@@ -451,7 +452,7 @@ def print_memos(memos: list[dict[str, Any]], output_format: str) -> None:
     formatter = TableFormatter()
     rows = [
         [
-            m["id"][:8],
+            m["name"],
             str(m["priority"]),
             ", ".join(m["tags"]) if m["tags"] else "-",
             formatter.truncate(m["content"], 50),
@@ -460,7 +461,7 @@ def print_memos(memos: list[dict[str, Any]], output_format: str) -> None:
         for m in memos
     ]
     formatter.print_table(
-        ["ID", "Pri", "Tags", "Content", "Detail"],
+        ["Name", "Pri", "Tags", "Content", "Detail"],
         rows,
         title="Memos",
     )
@@ -469,7 +470,7 @@ def print_memos(memos: list[dict[str, Any]], output_format: str) -> None:
     if memos and output_format == "table":
         print("\n--- Memo Details ---")
         for i, m in enumerate(memos, 1):
-            print(f"\n[{i}] ID: {m['id'][:8]} / Priority: {m['priority']}")
+            print(f"\n[{i}] Name: {m['name']} / Priority: {m['priority']}")
             print(f"    Tags: {', '.join(m['tags']) if m['tags'] else '-'}")
             print(f"    Updated: {m['updated_at']}")
             print("-" * 60)
