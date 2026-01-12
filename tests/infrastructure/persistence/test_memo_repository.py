@@ -45,6 +45,7 @@ def repository(session_factory) -> SQLiteMemoRepository:
 
 def create_test_memo(
     id: UUID | None = None,
+    name: str | None = None,
     content: str = "Test memo content",
     priority: int = 3,
     tags: list[str] | None = None,
@@ -54,8 +55,10 @@ def create_test_memo(
 ) -> Memo:
     """Create a test Memo entity."""
     now = datetime.now(timezone.utc)
+    memo_id = id or uuid4()
     return Memo(
-        id=id or uuid4(),
+        id=memo_id,
+        name=name or str(memo_id)[:8],
         content=content,
         priority=priority,
         tags=tags or [],
@@ -85,13 +88,16 @@ class TestSave:
     ) -> None:
         """Test that save updates existing memo with same ID (upsert)."""
         memo_id = uuid4()
-        original = create_test_memo(id=memo_id, content="Original", priority=3)
+        original = create_test_memo(
+            id=memo_id, name="original-memo", content="Original", priority=3
+        )
         await repository.save(original)
 
         # Update memo
         now = datetime.now(timezone.utc)
         updated = Memo(
             id=memo_id,
+            name="original-memo",
             content="Updated content",
             priority=5,
             tags=["updated"],
@@ -330,25 +336,75 @@ class TestGetAllTagsWithStats:
         assert result == []
 
 
-class TestDelete:
-    """delete method tests."""
+class TestFindByName:
+    """find_by_name method tests."""
 
-    async def test_delete_existing_memo(self, repository: SQLiteMemoRepository) -> None:
-        """Test deleting an existing memo."""
-        memo = create_test_memo()
-        await repository.save(memo)
-
-        result = await repository.delete(memo.id)
-
-        assert result is True
-        found = await repository.find_by_id(memo.id)
-        assert found is None
-
-    async def test_delete_nonexistent_memo(
+    async def test_find_existing_memo_by_name(
         self, repository: SQLiteMemoRepository
     ) -> None:
-        """Test deleting a nonexistent memo returns False."""
-        result = await repository.delete(uuid4())
+        """Test finding existing memo by name."""
+        memo = create_test_memo(name="unique-name")
+        await repository.save(memo)
+
+        found = await repository.find_by_name("unique-name")
+
+        assert found is not None
+        assert found.name == "unique-name"
+        assert found.id == memo.id
+
+    async def test_find_nonexistent_memo_by_name(
+        self, repository: SQLiteMemoRepository
+    ) -> None:
+        """Test finding nonexistent memo by name returns None."""
+        found = await repository.find_by_name("nonexistent")
+
+        assert found is None
+
+
+class TestExistsByName:
+    """exists_by_name method tests."""
+
+    async def test_exists_by_name_returns_true(
+        self, repository: SQLiteMemoRepository
+    ) -> None:
+        """Test exists_by_name returns True for existing memo."""
+        memo = create_test_memo(name="existing-name")
+        await repository.save(memo)
+
+        result = await repository.exists_by_name("existing-name")
+
+        assert result is True
+
+    async def test_exists_by_name_returns_false(
+        self, repository: SQLiteMemoRepository
+    ) -> None:
+        """Test exists_by_name returns False for nonexistent memo."""
+        result = await repository.exists_by_name("nonexistent")
+
+        assert result is False
+
+
+class TestDeleteByName:
+    """delete_by_name method tests."""
+
+    async def test_delete_existing_memo_by_name(
+        self, repository: SQLiteMemoRepository
+    ) -> None:
+        """Test deleting an existing memo by name."""
+        memo = create_test_memo(name="to-delete")
+        await repository.save(memo)
+
+        result = await repository.delete_by_name("to-delete")
+
+        assert result is True
+        found = await repository.find_by_name("to-delete")
+        assert found is None
+
+    async def test_delete_nonexistent_memo_by_name(
+        self, repository: SQLiteMemoRepository
+    ) -> None:
+        """Test deleting a nonexistent memo by name returns False."""
+        result = await repository.delete_by_name("nonexistent")
 
         assert result is False
 
