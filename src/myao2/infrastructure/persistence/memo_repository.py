@@ -97,8 +97,10 @@ class SQLiteMemoRepository:
             存在する場合 True、存在しない場合 False
         """
         async with self._session_factory() as session:
-            stmt = select(func.count()).select_from(MemoModel).where(
-                MemoModel.name == name
+            stmt = (
+                select(func.count())
+                .select_from(MemoModel)
+                .where(MemoModel.name == name)
             )
             result = await session.execute(stmt)
             count = result.scalar() or 0

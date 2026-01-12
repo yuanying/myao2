@@ -50,7 +50,8 @@ async def insert_old_memo(
     async with engine.begin() as conn:
         await conn.execute(
             text("""
-                INSERT INTO memos (id, content, priority, tags, detail, created_at, updated_at)
+                INSERT INTO memos
+                    (id, content, priority, tags, detail, created_at, updated_at)
                 VALUES (:id, :content, :priority, '[]', NULL, :now, :now)
             """),
             {"id": memo_id, "content": content, "priority": priority, "now": now},
@@ -152,13 +153,17 @@ class TestMigrateMemoAddName:
 
         # Verify original name is preserved
         async with engine.begin() as conn:
-            result = await conn.execute(text("SELECT name FROM memos WHERE id = 'test-id'"))
+            result = await conn.execute(
+                text("SELECT name FROM memos WHERE id = 'test-id'")
+            )
             row = result.fetchone()
 
         assert row is not None
         assert row[0] == "existing-name"
 
-    async def test_migration_skips_if_table_not_exists(self, engine: AsyncEngine) -> None:
+    async def test_migration_skips_if_table_not_exists(
+        self, engine: AsyncEngine
+    ) -> None:
         """Test migration does nothing if memos table doesn't exist."""
         # Don't create table
         await migrate_memo_add_name(engine)
@@ -166,7 +171,9 @@ class TestMigrateMemoAddName:
         # Verify no table was created
         async with engine.begin() as conn:
             result = await conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name='memos'")
+                text(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='memos'"
+                )
             )
             assert result.fetchone() is None
 
@@ -178,10 +185,13 @@ class TestMigrateMemoAddName:
         now = datetime.now(timezone.utc)
         async with engine.begin() as conn:
             await conn.execute(
-                text("""
-                    INSERT INTO memos (id, content, priority, tags, detail, created_at, updated_at)
-                    VALUES (:id, :content, :priority, :tags, :detail, :created_at, :updated_at)
-                """),
+                text(
+                    "INSERT INTO memos "
+                    "(id, content, priority, tags, detail, created_at, updated_at) "
+                    "VALUES "
+                    "(:id, :content, :priority, :tags, :detail, "
+                    ":created_at, :updated_at)"
+                ),
                 {
                     "id": memo_id,
                     "content": "Important memo",

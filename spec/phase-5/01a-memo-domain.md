@@ -39,6 +39,7 @@ class Memo:
 
     Attributes:
         id: メモの一意識別子（UUID）
+        name: メモの名前（ユニーク、1〜32文字）
         content: メモ本文（50文字程度を推奨）
         priority: 優先度（1-5、5が最高）
         tags: タグリスト（最大3タグ）
@@ -47,6 +48,7 @@ class Memo:
         updated_at: 更新日時
     """
     id: UUID
+    name: str  # ユニーク、1〜32文字
     content: str
     priority: int  # 1-5
     tags: list[str]  # 最大3タグ
@@ -59,12 +61,18 @@ class Memo:
 
 `__post_init__` で以下を検証:
 
-1. `priority` が 1-5 の範囲内であること
-2. `content` が空でないこと（空白のみも不可）
-3. `tags` が最大3つまでであること
+1. `name` が空でないこと（空白のみも不可）
+2. `name` が32文字以下であること
+3. `priority` が 1-5 の範囲内であること
+4. `content` が空でないこと（空白のみも不可）
+5. `tags` が最大3つまでであること
 
 ```python
 def __post_init__(self) -> None:
+    if not self.name or not self.name.strip():
+        raise ValueError("Name cannot be empty")
+    if len(self.name) > 32:
+        raise ValueError("Name must be 32 characters or less")
     if not 1 <= self.priority <= 5:
         raise ValueError("Priority must be between 1 and 5")
     if not self.content.strip():
@@ -109,6 +117,7 @@ class TagStats:
 
 ```python
 def create_memo(
+    name: str,
     content: str,
     priority: int,
     tags: list[str] | None = None,
@@ -116,6 +125,7 @@ def create_memo(
     """Memo エンティティを生成する
 
     Args:
+        name: メモの名前（ユニーク、1〜32文字）
         content: メモの内容
         priority: 優先度（1-5）
         tags: タグリスト（省略時は空リスト）
@@ -129,6 +139,7 @@ def create_memo(
     now = datetime.now(timezone.utc)
     return Memo(
         id=uuid4(),
+        name=name,
         content=content,
         priority=priority,
         tags=tags or [],
@@ -157,13 +168,35 @@ class MemoRepository(Protocol):
         ...
 
     async def find_by_id(self, memo_id: UUID) -> Memo | None:
-        """ID でメモを検索
+        """ID でメモを検索（内部利用）
 
         Args:
             memo_id: メモの ID
 
         Returns:
             見つかったメモ、または None
+        """
+        ...
+
+    async def find_by_name(self, name: str) -> Memo | None:
+        """名前でメモを検索
+
+        Args:
+            name: メモの名前
+
+        Returns:
+            見つかったメモ、または None
+        """
+        ...
+
+    async def exists_by_name(self, name: str) -> bool:
+        """名前でメモの存在を確認
+
+        Args:
+            name: メモの名前
+
+        Returns:
+            存在する場合 True
         """
         ...
 
@@ -246,11 +279,11 @@ class MemoRepository(Protocol):
         """
         ...
 
-    async def delete(self, memo_id: UUID) -> bool:
-        """メモを削除
+    async def delete_by_name(self, name: str) -> bool:
+        """名前でメモを削除
 
         Args:
-            memo_id: 削除するメモの ID
+            name: 削除するメモの名前
 
         Returns:
             削除成功の場合 True、メモが存在しない場合 False
@@ -285,6 +318,9 @@ class MemoRepository(Protocol):
 - 空タグリストでの正常作成
 - 不変性（frozen）
 - 等価性
+- name 空でエラー
+- name 32文字超でエラー
+- name 日本語での正常作成
 
 ### TestCreateMemo
 

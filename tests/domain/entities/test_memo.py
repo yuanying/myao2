@@ -411,7 +411,9 @@ class TestCreateMemo:
             create_memo(name="valid", content="Valid", priority=0)
 
         with pytest.raises(ValueError):
-            create_memo(name="valid", content="Valid", priority=3, tags=["1", "2", "3", "4"])
+            create_memo(
+                name="valid", content="Valid", priority=3, tags=["1", "2", "3", "4"]
+            )
 
     def test_create_memo_with_empty_name_raises_error(self) -> None:
         """Test that create_memo raises ValueError for empty name."""

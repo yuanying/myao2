@@ -27,10 +27,12 @@ def mock_memo_repository() -> MagicMock:
     repo = MagicMock()
     repo.save = AsyncMock()
     repo.find_by_id = AsyncMock()
+    repo.find_by_name = AsyncMock()
+    repo.exists_by_name = AsyncMock()
     repo.find_all = AsyncMock()
     repo.find_by_tag = AsyncMock()
     repo.get_all_tags_with_stats = AsyncMock()
-    repo.delete = AsyncMock()
+    repo.delete_by_name = AsyncMock()
     repo.count = AsyncMock()
     return repo
 
@@ -56,6 +58,7 @@ def sample_memo() -> Memo:
     """Create sample memo for testing."""
     return Memo(
         id=uuid4(),
+        name="test-memo",
         content="Test memo content",
         priority=3,
         tags=["test"],
@@ -70,6 +73,7 @@ def sample_memo_with_detail() -> Memo:
     """Create sample memo with detail for testing."""
     return Memo(
         id=uuid4(),
+        name="detail-memo",
         content="Test memo with detail",
         priority=4,
         tags=["preference"],
@@ -105,7 +109,10 @@ class TestAddMemo:
         self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
     ) -> None:
         """Test successful memo addition."""
+        mock_memo_repository.exists_by_name.return_value = False
+
         result = await add_memo(
+            name="new-memo",
             content="New memo content",
             priority=3,
             tags=None,
@@ -113,9 +120,10 @@ class TestAddMemo:
         )
 
         assert "メモを追加しました" in result
-        assert "ID:" in result
+        assert "name: new-memo" in result
         mock_memo_repository.save.assert_called_once()
         saved_memo = mock_memo_repository.save.call_args[0][0]
+        assert saved_memo.name == "new-memo"
         assert saved_memo.content == "New memo content"
         assert saved_memo.priority == 3
         assert saved_memo.tags == []
@@ -124,7 +132,10 @@ class TestAddMemo:
         self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
     ) -> None:
         """Test memo addition with tags."""
+        mock_memo_repository.exists_by_name.return_value = False
+
         result = await add_memo(
+            name="tagged-memo",
             content="Tagged memo",
             priority=5,
             tags=["user", "schedule"],
@@ -135,11 +146,31 @@ class TestAddMemo:
         saved_memo = mock_memo_repository.save.call_args[0][0]
         assert saved_memo.tags == ["user", "schedule"]
 
+    async def test_add_memo_duplicate_name(
+        self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
+    ) -> None:
+        """Test memo addition with duplicate name."""
+        mock_memo_repository.exists_by_name.return_value = True
+
+        result = await add_memo(
+            name="existing-memo",
+            content="Duplicate memo",
+            priority=3,
+            tags=None,
+            tool_context=mock_tool_context,
+        )
+
+        assert "既に使用されています" in result
+        mock_memo_repository.save.assert_not_called()
+
     async def test_add_memo_invalid_priority(
-        self, mock_tool_context: MagicMock
+        self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
     ) -> None:
         """Test memo addition with invalid priority."""
+        mock_memo_repository.exists_by_name.return_value = False
+
         result = await add_memo(
+            name="invalid-priority",
             content="Invalid priority memo",
             priority=6,
             tags=None,
@@ -148,9 +179,14 @@ class TestAddMemo:
 
         assert "メモの作成に失敗しました" in result
 
-    async def test_add_memo_empty_content(self, mock_tool_context: MagicMock) -> None:
+    async def test_add_memo_empty_content(
+        self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
+    ) -> None:
         """Test memo addition with empty content."""
+        mock_memo_repository.exists_by_name.return_value = False
+
         result = await add_memo(
+            name="empty-content",
             content="   ",
             priority=3,
             tags=None,
@@ -159,12 +195,49 @@ class TestAddMemo:
 
         assert "メモの作成に失敗しました" in result
 
-    async def test_add_memo_too_many_tags(self, mock_tool_context: MagicMock) -> None:
+    async def test_add_memo_too_many_tags(
+        self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
+    ) -> None:
         """Test memo addition with too many tags."""
+        mock_memo_repository.exists_by_name.return_value = False
+
         result = await add_memo(
+            name="too-many-tags",
             content="Too many tags",
             priority=3,
             tags=["tag1", "tag2", "tag3", "tag4"],
+            tool_context=mock_tool_context,
+        )
+
+        assert "メモの作成に失敗しました" in result
+
+    async def test_add_memo_empty_name(
+        self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
+    ) -> None:
+        """Test memo addition with empty name."""
+        mock_memo_repository.exists_by_name.return_value = False
+
+        result = await add_memo(
+            name="",
+            content="Valid content",
+            priority=3,
+            tags=None,
+            tool_context=mock_tool_context,
+        )
+
+        assert "メモの作成に失敗しました" in result
+
+    async def test_add_memo_name_too_long(
+        self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
+    ) -> None:
+        """Test memo addition with name exceeding 32 characters."""
+        mock_memo_repository.exists_by_name.return_value = False
+
+        result = await add_memo(
+            name="a" * 33,
+            content="Valid content",
+            priority=3,
+            tags=None,
             tool_context=mock_tool_context,
         )
 
@@ -181,14 +254,16 @@ class TestEditMemo:
         sample_memo: Memo,
     ) -> None:
         """Test editing all fields of a memo."""
-        mock_memo_repository.find_by_id.return_value = sample_memo
+        mock_memo_repository.find_by_name.return_value = sample_memo
+        mock_memo_repository.exists_by_name.return_value = False
 
         result = await edit_memo(
-            memo_id=str(sample_memo.id),
+            memo_name=sample_memo.name,
             content="Updated content",
             priority=5,
             tags=["updated"],
             detail="New detail",
+            new_name=None,
             tool_context=mock_tool_context,
         )
 
@@ -207,14 +282,15 @@ class TestEditMemo:
         sample_memo: Memo,
     ) -> None:
         """Test editing only some fields of a memo."""
-        mock_memo_repository.find_by_id.return_value = sample_memo
+        mock_memo_repository.find_by_name.return_value = sample_memo
 
         result = await edit_memo(
-            memo_id=str(sample_memo.id),
+            memo_name=sample_memo.name,
             content="Updated content only",
             priority=None,
             tags=None,
             detail=None,
+            new_name=None,
             tool_context=mock_tool_context,
         )
 
@@ -231,14 +307,15 @@ class TestEditMemo:
         sample_memo: Memo,
     ) -> None:
         """Test adding detail to a memo."""
-        mock_memo_repository.find_by_id.return_value = sample_memo
+        mock_memo_repository.find_by_name.return_value = sample_memo
 
         result = await edit_memo(
-            memo_id=str(sample_memo.id),
+            memo_name=sample_memo.name,
             content=None,
             priority=None,
             tags=None,
             detail="Added detail",
+            new_name=None,
             tool_context=mock_tool_context,
         )
 
@@ -246,38 +323,70 @@ class TestEditMemo:
         saved_memo = mock_memo_repository.save.call_args[0][0]
         assert saved_memo.detail == "Added detail"
 
+    async def test_edit_memo_change_name(
+        self,
+        mock_tool_context: MagicMock,
+        mock_memo_repository: MagicMock,
+        sample_memo: Memo,
+    ) -> None:
+        """Test changing memo name."""
+        mock_memo_repository.find_by_name.return_value = sample_memo
+        mock_memo_repository.exists_by_name.return_value = False
+
+        result = await edit_memo(
+            memo_name=sample_memo.name,
+            content=None,
+            priority=None,
+            tags=None,
+            detail=None,
+            new_name="new-name",
+            tool_context=mock_tool_context,
+        )
+
+        assert "メモを更新しました" in result
+        saved_memo = mock_memo_repository.save.call_args[0][0]
+        assert saved_memo.name == "new-name"
+
+    async def test_edit_memo_change_name_duplicate(
+        self,
+        mock_tool_context: MagicMock,
+        mock_memo_repository: MagicMock,
+        sample_memo: Memo,
+    ) -> None:
+        """Test changing memo name to existing name."""
+        mock_memo_repository.find_by_name.return_value = sample_memo
+        mock_memo_repository.exists_by_name.return_value = True
+
+        result = await edit_memo(
+            memo_name=sample_memo.name,
+            content=None,
+            priority=None,
+            tags=None,
+            detail=None,
+            new_name="existing-name",
+            tool_context=mock_tool_context,
+        )
+
+        assert "既に使用されています" in result
+        mock_memo_repository.save.assert_not_called()
+
     async def test_edit_memo_not_found(
         self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
     ) -> None:
         """Test editing a non-existent memo."""
-        mock_memo_repository.find_by_id.return_value = None
-        memo_id = str(uuid4())
+        mock_memo_repository.find_by_name.return_value = None
 
         result = await edit_memo(
-            memo_id=memo_id,
+            memo_name="nonexistent",
             content="Updated",
             priority=None,
             tags=None,
             detail=None,
+            new_name=None,
             tool_context=mock_tool_context,
         )
 
         assert "メモが見つかりません" in result
-
-    async def test_edit_memo_invalid_id_format(
-        self, mock_tool_context: MagicMock
-    ) -> None:
-        """Test editing with invalid memo ID format."""
-        result = await edit_memo(
-            memo_id="invalid-uuid",
-            content="Updated",
-            priority=None,
-            tags=None,
-            detail=None,
-            tool_context=mock_tool_context,
-        )
-
-        assert "無効なメモID" in result
 
     async def test_edit_memo_invalid_priority(
         self,
@@ -286,14 +395,15 @@ class TestEditMemo:
         sample_memo: Memo,
     ) -> None:
         """Test editing with invalid priority."""
-        mock_memo_repository.find_by_id.return_value = sample_memo
+        mock_memo_repository.find_by_name.return_value = sample_memo
 
         result = await edit_memo(
-            memo_id=str(sample_memo.id),
+            memo_name=sample_memo.name,
             content=None,
             priority=0,
             tags=None,
             detail=None,
+            new_name=None,
             tool_context=mock_tool_context,
         )
 
@@ -307,41 +417,29 @@ class TestRemoveMemo:
         self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
     ) -> None:
         """Test successful memo removal."""
-        mock_memo_repository.delete.return_value = True
-        memo_id = str(uuid4())
+        mock_memo_repository.delete_by_name.return_value = True
 
         result = await remove_memo(
-            memo_id=memo_id,
+            memo_name="test-memo",
             tool_context=mock_tool_context,
         )
 
         assert "メモを削除しました" in result
-        assert memo_id[:8] in result
+        assert "test-memo" in result
+        mock_memo_repository.delete_by_name.assert_called_once_with("test-memo")
 
     async def test_remove_memo_not_found(
         self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
     ) -> None:
         """Test removing a non-existent memo."""
-        mock_memo_repository.delete.return_value = False
-        memo_id = str(uuid4())
+        mock_memo_repository.delete_by_name.return_value = False
 
         result = await remove_memo(
-            memo_id=memo_id,
+            memo_name="nonexistent",
             tool_context=mock_tool_context,
         )
 
         assert "メモが見つかりません" in result
-
-    async def test_remove_memo_invalid_id_format(
-        self, mock_tool_context: MagicMock
-    ) -> None:
-        """Test removing with invalid memo ID format."""
-        result = await remove_memo(
-            memo_id="invalid-uuid",
-            tool_context=mock_tool_context,
-        )
-
-        assert "無効なメモID" in result
 
 
 class TestListMemo:
@@ -372,6 +470,7 @@ class TestListMemo:
         """Test listing multiple memos."""
         memo2 = Memo(
             id=uuid4(),
+            name="second-memo",
             content="Second memo",
             priority=5,
             tags=["user"],
@@ -392,6 +491,9 @@ class TestListMemo:
         assert "メモ一覧（1-2件 / 全2件）" in result
         assert "Second memo" in result
         assert "Test memo content" in result
+        # Verify name is displayed (not id[:8])
+        assert "second-memo" in result
+        assert "test-memo" in result
 
     async def test_list_memo_with_tag_filter(
         self,
@@ -479,20 +581,21 @@ class TestGetMemo:
         sample_memo: Memo,
     ) -> None:
         """Test successful memo retrieval."""
-        mock_memo_repository.find_by_id.return_value = sample_memo
+        mock_memo_repository.find_by_name.return_value = sample_memo
 
         result = await get_memo(
-            memo_id=str(sample_memo.id),
+            memo_name=sample_memo.name,
             tool_context=mock_tool_context,
         )
 
         assert "メモ詳細:" in result
-        assert f"ID: {str(sample_memo.id)[:8]}" in result
+        assert f"name: {sample_memo.name}" in result
         assert "優先度: 3" in result
         assert "タグ: test" in result
         assert "内容: Test memo content" in result
         assert "作成日:" in result
         assert "更新日:" in result
+        mock_memo_repository.find_by_name.assert_called_once_with(sample_memo.name)
 
     async def test_get_memo_with_detail(
         self,
@@ -501,10 +604,10 @@ class TestGetMemo:
         sample_memo_with_detail: Memo,
     ) -> None:
         """Test retrieval of memo with detail."""
-        mock_memo_repository.find_by_id.return_value = sample_memo_with_detail
+        mock_memo_repository.find_by_name.return_value = sample_memo_with_detail
 
         result = await get_memo(
-            memo_id=str(sample_memo_with_detail.id),
+            memo_name=sample_memo_with_detail.name,
             tool_context=mock_tool_context,
         )
 
@@ -514,26 +617,14 @@ class TestGetMemo:
         self, mock_tool_context: MagicMock, mock_memo_repository: MagicMock
     ) -> None:
         """Test getting a non-existent memo."""
-        mock_memo_repository.find_by_id.return_value = None
-        memo_id = str(uuid4())
+        mock_memo_repository.find_by_name.return_value = None
 
         result = await get_memo(
-            memo_id=memo_id,
+            memo_name="nonexistent",
             tool_context=mock_tool_context,
         )
 
         assert "メモが見つかりません" in result
-
-    async def test_get_memo_invalid_id_format(
-        self, mock_tool_context: MagicMock
-    ) -> None:
-        """Test getting with invalid memo ID format."""
-        result = await get_memo(
-            memo_id="invalid-uuid",
-            tool_context=mock_tool_context,
-        )
-
-        assert "無効なメモID" in result
 
 
 class TestListMemoTags:

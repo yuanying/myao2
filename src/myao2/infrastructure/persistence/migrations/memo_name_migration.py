@@ -20,9 +20,7 @@ async def migrate_memo_add_name(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         # 1. memosテーブルが存在するか確認
         result = await conn.execute(
-            text(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='memos'"
-            )
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='memos'")
         )
         if result.fetchone() is None:
             logger.debug("memos table does not exist, skipping migration")
@@ -71,12 +69,13 @@ async def migrate_memo_add_name(engine: AsyncEngine) -> None:
         # 6. データを移行
         for memo_id, name in name_assignments.items():
             await conn.execute(
-                text("""
-                    INSERT INTO memos_new (id, name, content, priority, tags, detail, created_at, updated_at)
-                    SELECT id, :name, content, priority, tags, detail, created_at, updated_at
-                    FROM memos
-                    WHERE id = :memo_id
-                """),
+                text(
+                    "INSERT INTO memos_new "
+                    "(id, name, content, priority, tags, detail, "
+                    "created_at, updated_at) "
+                    "SELECT id, :name, content, priority, tags, detail, "
+                    "created_at, updated_at FROM memos WHERE id = :memo_id"
+                ),
                 {"name": name, "memo_id": memo_id},
             )
 
@@ -84,7 +83,8 @@ async def migrate_memo_add_name(engine: AsyncEngine) -> None:
         await conn.execute(text("DROP TABLE memos"))
         await conn.execute(text("ALTER TABLE memos_new RENAME TO memos"))
 
-        logger.info(f"Memo name migration completed. Migrated {len(name_assignments)} memos.")
+        migrated_count = len(name_assignments)
+        logger.info(f"Memo name migration completed. Migrated {migrated_count} memos.")
 
 
 async def _create_new_table(conn) -> None:
