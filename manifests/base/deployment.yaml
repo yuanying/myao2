@@ -50,16 +50,31 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+          ports:
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /live
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 24  # periodSeconds(5秒) × failureThreshold(24回) = 最大120秒の起動猶予
           livenessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - "pgrep -f 'python -m myao2'"
-            initialDelaySeconds: 30
+            httpGet:
+              path: /live
+              port: health
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: health
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 2
       volumes:
         - name: config
           configMap:
