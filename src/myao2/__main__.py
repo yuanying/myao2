@@ -20,6 +20,7 @@ from myao2.infrastructure.events.dispatcher import EventDispatcher
 from myao2.infrastructure.events.loop import EventLoop
 from myao2.infrastructure.events.queue import EventQueue
 from myao2.infrastructure.events.scheduler import EventScheduler
+from myao2.infrastructure.http import HealthServer
 from myao2.infrastructure.llm.strands import (
     StrandsMemorySummarizer,
     StrandsResponseGenerator,
@@ -314,6 +315,19 @@ async def main() -> None:
 
     runner = SlackAppRunner(app, config.slack.app_token)
 
+    # Initialize health server
+    health_port = 8080
+    if config.health_check:
+        health_port = config.health_check.port
+
+    health_server = HealthServer(
+        event_loop=event_loop,
+        event_scheduler=event_scheduler,
+        slack_runner=runner,
+        db_manager=db_manager,
+        port=health_port,
+    )
+
     logger.info("Starting %s...", config.persona.name)
     logger.info("Starting Socket Mode handler...")
     logger.info("Starting event loop...")
@@ -323,11 +337,13 @@ async def main() -> None:
         config.memory.long_term_update_interval_seconds,
         config.response.check_interval_seconds,
     )
+    logger.info("Starting health server on port %d...", health_port)
 
     # Create tasks
     runner_task = asyncio.create_task(runner.start())
     event_loop_task = asyncio.create_task(event_loop.start())
     event_scheduler_task = asyncio.create_task(event_scheduler.start())
+    health_server_task = asyncio.create_task(health_server.start())
 
     # Setup signal handlers for graceful shutdown
     stop_event = asyncio.Event()
@@ -346,6 +362,9 @@ async def main() -> None:
     # Graceful shutdown
     logger.info("Shutting down...")
 
+    # Stop health server first (fastest to stop)
+    await health_server.stop()
+
     # Stop event loop and scheduler (have graceful stop)
     await event_loop.stop()
     await event_scheduler.stop()
@@ -359,10 +378,15 @@ async def main() -> None:
     runner_task.cancel()
     event_loop_task.cancel()
     event_scheduler_task.cancel()
+    health_server_task.cancel()
 
     # Wait for tasks to complete
     await asyncio.gather(
-        runner_task, event_loop_task, event_scheduler_task, return_exceptions=True
+        runner_task,
+        event_loop_task,
+        event_scheduler_task,
+        health_server_task,
+        return_exceptions=True,
     )
 
     # Close database connections
