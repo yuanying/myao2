@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import signal
 import sys
 from pathlib import Path
@@ -55,6 +56,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def configure_telemetry() -> None:
+    """環境変数に基づいてテレメトリを設定する。
+
+    OTEL_EXPORTER_OTLP_ENDPOINT が設定されている場合、
+    Strands Agents のテレメトリを有効化し、OTLP Exporter を設定する。
+    """
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if not endpoint:
+        logger.debug("OTEL_EXPORTER_OTLP_ENDPOINT not set, telemetry disabled")
+        return
+
+    # デフォルトのサービス名を設定（未設定の場合のみ）
+    if not os.environ.get("OTEL_SERVICE_NAME"):
+        os.environ["OTEL_SERVICE_NAME"] = "myao2"
+
+    try:
+        from strands.telemetry import StrandsTelemetry
+
+        strands_telemetry = StrandsTelemetry()
+        strands_telemetry.setup_otlp_exporter()
+        logger.info("Telemetry enabled with OTLP endpoint: %s", endpoint)
+    except ImportError:
+        logger.warning(
+            "strands-agents[otel] not installed, telemetry disabled. "
+            "Install with: pip install 'strands-agents[otel]'"
+        )
+    except Exception as e:
+        logger.warning("Failed to setup telemetry: %s", e)
+
+
 def configure_logging(config: LoggingConfig | None) -> None:
     """Configure logging based on config.
 
@@ -90,6 +121,9 @@ def configure_logging(config: LoggingConfig | None) -> None:
 
 async def main() -> None:
     """アプリケーションを起動する"""
+    # Initialize telemetry before anything else
+    configure_telemetry()
+
     config_path = Path("config.yaml")
     if not config_path.exists():
         logger.error("config.yaml not found")

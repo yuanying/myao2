@@ -46,6 +46,35 @@ uv run pytest
 uv run python -m myao2
 ```
 
+## Observability
+
+### OpenTelemetry (OTLP) サポート
+
+環境変数 `OTEL_EXPORTER_OTLP_ENDPOINT` を設定することで、自動的にトレーシングが有効になります。
+
+```bash
+# 基本設定
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+
+# オプション: サービス名の設定（デフォルト: myao2）
+export OTEL_SERVICE_NAME=myao2-production
+
+# オプション: 認証ヘッダーの設定
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer xxx"
+```
+
+#### ローカルでの動作確認 (Jaeger)
+
+```bash
+docker run -d --name jaeger \
+  -e COLLECTOR_OTLP_ENABLED=true \
+  -p 16686:16686 \
+  -p 4318:4318 \
+  jaegertracing/all-in-one:latest
+```
+
+Jaeger UI: http://localhost:16686
+
 ## アーキテクチャ
 
 クリーンアーキテクチャ / DDD / Dependency Injection を採用
