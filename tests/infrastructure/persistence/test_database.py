@@ -153,3 +153,49 @@ class TestDatabaseManager:
         await manager.close()
 
         assert manager._engine is None
+
+
+class TestDatabaseManagerIsHealthy:
+    """Tests for is_healthy method."""
+
+    async def test_is_healthy_returns_true_when_connected(self, tmp_path: Path) -> None:
+        """Test that is_healthy returns True when database is accessible."""
+        db_path = tmp_path / "test.db"
+        manager = DatabaseManager(str(db_path))
+        await manager.create_tables()
+
+        result = await manager.is_healthy()
+
+        assert result is True
+
+    async def test_is_healthy_returns_true_for_in_memory_db(self) -> None:
+        """Test that is_healthy returns True for in-memory database."""
+        manager = DatabaseManager(":memory:")
+        await manager.create_tables()
+
+        result = await manager.is_healthy()
+
+        assert result is True
+
+    async def test_is_healthy_returns_false_when_engine_is_none(self) -> None:
+        """Test that is_healthy returns False when engine is not initialized."""
+        manager = DatabaseManager(":memory:")
+        # Don't call create_tables - engine is None
+
+        result = await manager.is_healthy()
+
+        assert result is False
+
+    async def test_is_healthy_returns_false_after_close(self, tmp_path: Path) -> None:
+        """Test that is_healthy returns False after close() is called."""
+        db_path = tmp_path / "test.db"
+        manager = DatabaseManager(str(db_path))
+        await manager.create_tables()
+
+        # Should be healthy before close
+        assert await manager.is_healthy() is True
+
+        await manager.close()
+
+        # Should not be healthy after close
+        assert await manager.is_healthy() is False

@@ -38,6 +38,25 @@ class SlackAppRunner:
         self._app_token = app_token
         self._handler: AsyncSocketModeHandler | None = None
 
+    @property
+    def is_connected(self) -> bool:
+        """Check if the Slack connection is active.
+
+        Returns:
+            True if connected to Slack via Socket Mode, False otherwise.
+        """
+        if self._handler is None:
+            return False
+        client = self._handler.client
+        # Check synchronously available connection state attributes
+        # (SocketModeClient.is_connected() is async due to ping-pong check)
+        return (
+            not client.closed
+            and not client.stale
+            and client.current_session is not None
+            and not client.current_session.closed
+        )
+
     async def start(self) -> None:
         """Start the app using Socket Mode (async)."""
         self._handler = AsyncSocketModeHandler(self._app, self._app_token)
