@@ -11,6 +11,7 @@ class Memo:
 
     Attributes:
         id: メモの一意識別子（UUID）
+        name: メモの名前（ユニーク、1-32文字）
         content: メモ本文（50文字程度を推奨）
         priority: 優先度（1-5、5が最高）
         tags: タグリスト（最大3タグ）
@@ -20,6 +21,7 @@ class Memo:
     """
 
     id: UUID
+    name: str
     content: str
     priority: int
     tags: list[str]
@@ -29,6 +31,10 @@ class Memo:
 
     def __post_init__(self) -> None:
         """バリデーション"""
+        if not self.name or not self.name.strip():
+            raise ValueError("Name cannot be empty")
+        if len(self.name) > 32:
+            raise ValueError("Name must be 32 characters or less")
         if not 1 <= self.priority <= 5:
             raise ValueError("Priority must be between 1 and 5")
         if not self.content.strip():
@@ -58,6 +64,7 @@ class TagStats:
 
 
 def create_memo(
+    name: str,
     content: str,
     priority: int,
     tags: list[str] | None = None,
@@ -65,6 +72,7 @@ def create_memo(
     """Memo エンティティを生成する
 
     Args:
+        name: メモの名前（ユニーク、1-32文字）
         content: メモの内容
         priority: 優先度（1-5）
         tags: タグリスト（省略時は空リスト）
@@ -78,6 +86,7 @@ def create_memo(
     now = datetime.now(timezone.utc)
     return Memo(
         id=uuid4(),
+        name=name,
         content=content,
         priority=priority,
         tags=tags or [],
