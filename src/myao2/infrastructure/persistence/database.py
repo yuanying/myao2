@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -86,3 +87,21 @@ class DatabaseManager:
             await self._engine.dispose()
             self._engine = None
             self._session_factory = None
+
+    async def is_healthy(self) -> bool:
+        """データベース接続が正常かどうかを確認する
+
+        簡単なクエリを実行して接続状態を確認する。
+
+        Returns:
+            接続が正常な場合は True、それ以外は False
+        """
+        if self._engine is None:
+            return False
+
+        try:
+            async with self._engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            return True
+        except Exception:
+            return False
