@@ -10,6 +10,7 @@ import yaml
 from myao2.config.models import (
     AgentConfig,
     Config,
+    HealthCheckConfig,
     JudgmentSkipConfig,
     JudgmentSkipThreshold,
     LoggingConfig,
@@ -269,6 +270,14 @@ def load_config(path: str | Path) -> Config:
             web_search=web_search_config,
         )
 
+    # HealthCheckConfig (optional)
+    health_check_config: HealthCheckConfig | None = None
+    health_check_data = data.get("health_check")
+    if health_check_data:
+        health_check_config = HealthCheckConfig(
+            port=health_check_data.get("port", 8080),
+        )
+
     return Config(
         slack=slack,
         agents=agents,
@@ -277,4 +286,5 @@ def load_config(path: str | Path) -> Config:
         response=response,
         logging=logging_config,
         tools=tools_config,
+        health_check=health_check_config,
     )

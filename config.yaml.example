@@ -102,3 +102,7 @@ tools:
     search_depth: basic        # 検索深度: basic, advanced, fast, ultra-fast（デフォルト: basic）
     max_results: 5             # 検索結果の最大件数（デフォルト: 5）
     max_content_length: 500    # 各結果のcontent最大文字数、0で無制限（デフォルト: 500）
+
+# ヘルスチェック設定（オプショナル）
+health_check:
+  port: 8080  # ヘルスチェックサーバーのポート番号（デフォルト: 8080）

@@ -165,6 +165,17 @@ class ToolsConfig:
 
 
 @dataclass
+class HealthCheckConfig:
+    """ヘルスチェック設定
+
+    Attributes:
+        port: ヘルスチェックサーバーのポート番号
+    """
+
+    port: int = 8080
+
+
+@dataclass
 class Config:
     """アプリケーション設定"""
 
@@ -175,3 +186,4 @@ class Config:
     response: ResponseConfig
     logging: LoggingConfig | None = None
     tools: ToolsConfig | None = None
+    health_check: HealthCheckConfig | None = None
