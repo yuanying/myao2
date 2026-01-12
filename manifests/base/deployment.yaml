@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myao2
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # SQLite requires single instance
+  selector:
+    matchLabels:
+      app: myao2
+  template:
+    metadata:
+      labels:
+        app: myao2
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: myao2
+          image: ghcr.io/yuanying/myao2:latest
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          # myao2-secrets の全キーを環境変数として読み込み
+          # Secret のキー名がそのまま環境変数名になる（例: SLACK_BOT_TOKEN）
+          envFrom:
+            - secretRef:
+                name: myao2-secrets
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep -f 'python -m myao2'"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: myao2-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: myao2-data
+        - name: tmp
+          emptyDir: {}
+      restartPolicy: Always

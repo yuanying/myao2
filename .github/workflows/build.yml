@@ -1,0 +1,108 @@
+# =============================================================================
+# Docker イメージビルド & GHCR プッシュワークフロー
+# =============================================================================
+#
+# 【トリガー】
+#   - main ブランチへのプッシュ
+#   - v* 形式のタグプッシュ（例: v1.0.0）
+#   - main ブランチへの Pull Request（ビルドのみ、プッシュなし）
+#
+# 【機能】
+#   1. マルチアーキテクチャビルド（linux/amd64, linux/arm64）
+#   2. GitHub Container Registry (ghcr.io) へのプッシュ
+#   3. 自動タグ生成（ブランチ名、Git タグ、SHA、セマンティックバージョン、latest）
+#   4. GitHub Actions キャッシュによるビルド高速化
+#   5. ビルド来歴証明（Build Provenance Attestation）の生成
+#
+# 【生成されるイメージタグ例】v1.2.3 タグをプッシュした場合
+#   - ghcr.io/yuanying/myao2:v1.2.3
+#   - ghcr.io/yuanying/myao2:1.2.3
+#   - ghcr.io/yuanying/myao2:1.2
+#   - ghcr.io/yuanying/myao2:1
+#   - ghcr.io/yuanying/myao2:<sha>
+#
+# =============================================================================
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # ブランチ名をタグとして使用（例: main → ghcr.io/xxx:main）
+            type=ref,event=branch
+            # Git タグをそのままイメージタグとして使用（例: v1.0.0 → ghcr.io/xxx:v1.0.0）
+            type=ref,event=tag
+            # コミットの短縮 SHA をタグとして使用（prefix=空でプレフィックスなし）
+            type=sha,prefix=
+            # セマンティックバージョニング（v1.2.3 タグから各パターンのタグを生成）
+            # - {{version}}: バージョン全体（例: 1.2.3）
+            type=semver,pattern={{version}}
+            # - {{major}}.{{minor}}: メジャー.マイナーのみ（例: 1.2）
+            type=semver,pattern={{major}}.{{minor}}
+            # - {{major}}: メジャーバージョンのみ（例: 1）
+            type=semver,pattern={{major}}
+            # デフォルトブランチ（main）の場合のみ latest タグを付与
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generate artifact attestation
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

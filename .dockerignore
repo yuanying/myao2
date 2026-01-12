@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+.pytest_cache
+.ruff_cache
+.venv
+*.egg-info
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Development
+tests/
+docs/
+spec/
+hack/
+worktrees/
+.claude/
+
+# Environment & Config (secrets)
+.env
+config.yaml
+
+# Data
+data/
+*.db
+
+# Build artifacts
+build/
+dist/
+*.egg
+
+# OS
+.DS_Store
+Thumbs.db
