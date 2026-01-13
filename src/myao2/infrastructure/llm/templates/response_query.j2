@@ -44,7 +44,7 @@
 ### 重要なメモ（優先度4以上）
 
 {% for memo in high_priority_memos %}
-- **ID**: {{ memo.id | string | truncate(8, True, '') }}
+- **Name**: {{ memo.name }}
   - 優先度: {{ memo.priority }}
   - タグ: {{ memo.tags | join(", ") if memo.tags else "なし" }}
   - 更新日: {{ memo.updated_at | format_timestamp }}
@@ -56,7 +56,7 @@
 ### 直近のメモ
 
 {% for memo in recent_memos %}
-- **ID**: {{ memo.id | string | truncate(8, True, '') }} / 優先度: {{ memo.priority }} / タグ: {{ memo.tags | join(", ") if memo.tags else "なし" }} / {{ memo.content }}{% if memo.has_detail %} [詳細あり]{% endif %}
+- **Name**: {{ memo.name }} / 優先度: {{ memo.priority }} / タグ: {{ memo.tags | join(", ") if memo.tags else "なし" }} / {{ memo.content }}{% if memo.has_detail %} [詳細あり]{% endif %}
 
 {% endfor %}
 {% endif %}
