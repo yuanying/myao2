@@ -153,6 +153,7 @@ def load_config(path: str | Path) -> Config:
         model_id = _validate_required_field(agent_item, "model_id", f"agents.{key}")
         agents[key] = AgentConfig(
             model_id=model_id,
+            system_prompt=agent_item.get("system_prompt"),
             params=agent_item.get("params", {}),
             client_args=agent_item.get("client_args", {}),
         )
