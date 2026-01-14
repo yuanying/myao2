@@ -739,8 +739,17 @@ class TestAgentConfigDataClass:
         """AgentConfigのデフォルト値が正しい"""
         config = AgentConfig(model_id="openai/gpt-4o")
         assert config.model_id == "openai/gpt-4o"
+        assert config.system_prompt is None
         assert config.params == {}
         assert config.client_args == {}
+
+    def test_agent_config_with_system_prompt(self) -> None:
+        """AgentConfigのsystem_promptが設定できる"""
+        config = AgentConfig(
+            model_id="openai/gpt-4o",
+            system_prompt="テスト用システムプロンプト",
+        )
+        assert config.system_prompt == "テスト用システムプロンプト"
 
     def test_agent_config_with_params(self) -> None:
         """AgentConfigのparamsが設定できる"""
@@ -1111,3 +1120,78 @@ memory:
         with pytest.raises(ConfigValidationError) as exc_info:
             load_config(config_path)
         assert "agents" in str(exc_info.value)
+
+    def test_load_config_with_agent_system_prompt(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """agents.*.system_promptが正しく読み込まれる"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+agents:
+  response:
+    model_id: "openai/gpt-4o"
+    system_prompt: |
+      レスポンス用システムプロンプト
+  judgment:
+    model_id: "openai/gpt-4o-mini"
+    system_prompt: |
+      判定用システムプロンプト
+  memory:
+    model_id: "openai/gpt-4o"
+    system_prompt: |
+      メモリ用システムプロンプト
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        expected_response = "レスポンス用システムプロンプト\n"
+        expected_judgment = "判定用システムプロンプト\n"
+        expected_memory = "メモリ用システムプロンプト\n"
+        assert config.agents["response"].system_prompt == expected_response
+        assert config.agents["judgment"].system_prompt == expected_judgment
+        assert config.agents["memory"].system_prompt == expected_memory
+
+    def test_load_config_agent_system_prompt_omitted(
+        self, temp_config_dir: Path, env_vars: dict[str, str]
+    ) -> None:
+        """system_prompt省略時はNoneがデフォルト"""
+        config_content = """
+slack:
+  bot_token: ${TEST_BOT_TOKEN}
+  app_token: ${TEST_APP_TOKEN}
+
+agents:
+  response:
+    model_id: "openai/gpt-4o"
+  judgment:
+    model_id: "openai/gpt-4o-mini"
+  memory:
+    model_id: "openai/gpt-4o"
+
+persona:
+  name: "myao"
+  system_prompt: "test"
+
+memory:
+  database_path: "./data/memory.db"
+"""
+        config_path = temp_config_dir / "config.yaml"
+        config_path.write_text(config_content)
+
+        config = load_config(config_path)
+
+        assert config.agents["response"].system_prompt is None
+        assert config.agents["judgment"].system_prompt is None
+        assert config.agents["memory"].system_prompt is None

@@ -208,7 +208,10 @@ async def run_generate(
 
     # Create model and generator
     response_model = create_model(config.agents["response"])
-    generator = StrandsResponseGenerator(response_model)
+    generator = StrandsResponseGenerator(
+        response_model,
+        agent_config=config.agents["response"],
+    )
 
     # プロンプト構築
     system_prompt = generator.build_system_prompt(context)
@@ -256,7 +259,10 @@ async def run_judgment(
 
     # Create model and judgment
     judgment_model = create_model(config.agents["judgment"])
-    judgment = StrandsResponseJudgment(judgment_model)
+    judgment = StrandsResponseJudgment(
+        judgment_model,
+        agent_config=config.agents["judgment"],
+    )
 
     # プロンプト構築
     system_prompt = judgment.build_system_prompt(context)
@@ -351,7 +357,11 @@ async def run_summarize(
 
     # Create model and summarizer
     memory_model = create_model(config.agents["memory"])
-    summarizer = StrandsMemorySummarizer(model=memory_model, config=config.memory)
+    summarizer = StrandsMemorySummarizer(
+        model=memory_model,
+        config=config.memory,
+        agent_config=config.agents["memory"],
+    )
 
     # プロンプト構築
     system_prompt = summarizer.build_system_prompt(context, scope, memory_type)

@@ -203,6 +203,7 @@ async def main() -> None:
 
     response_generator = StrandsResponseGenerator(
         response_model,
+        agent_config=config.agents["response"],
         memo_tools_factory=memo_tools_factory,
         web_fetch_tools_factory=web_fetch_tools_factory,
         web_search_tools_factory=web_search_tools_factory,
@@ -243,7 +244,10 @@ async def main() -> None:
     await channel_initializer.sync_channels()
 
     # Initialize autonomous response components
-    response_judgment = StrandsResponseJudgment(judgment_model)
+    response_judgment = StrandsResponseJudgment(
+        judgment_model,
+        agent_config=config.agents["judgment"],
+    )
 
     channel_monitor = DBChannelMonitor(
         message_repository=message_repository,
@@ -277,6 +281,7 @@ async def main() -> None:
     memory_summarizer = StrandsMemorySummarizer(
         model=memory_model,
         config=config.memory,
+        agent_config=config.agents["memory"],
     )
 
     generate_memory_use_case = GenerateMemoryUseCase(
